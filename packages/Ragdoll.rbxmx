@@ -1,9 +1,9 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
 <Meta name="ExplicitAutoJoints">true</Meta>
-<Item class="ModuleScript" referent="RBXYT2JNFY138ZERMKY2MIKIM02R8F6X90J">
+<Item class="ModuleScript" referent="RBXF16LAX9ZLX96RAY72Q3M0J1AOTPIHPVW">
 <Properties>
 <string name="Name">Ragdoll</string>
-<string name="ScriptGuid">{8dfdcde3-a52e-4ad8-943c-30a4eeb8613c}</string>
+<string name="ScriptGuid">{4a0bd2ca-74a7-4f71-8ad5-629715def487}</string>
 <ProtectedString name="Source"><![CDATA[local runService = game:GetService("RunService")
 local players = game:GetService("Players")
 
@@ -293,7 +293,7 @@ end
 
 return Ragdoll]]></ProtectedString>
 </Properties>
-<Item class="RemoteEvent" referent="RBX6D85V8D6Q0617IJYG15HN763X6S5ZNSV">
+<Item class="RemoteEvent" referent="RBXOS1O675NRPY3TJLWJ3HNANSRBHBI8K7B">
 <Properties>
 <string name="Name">RagdollReplication</string>
 </Properties>
