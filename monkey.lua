@@ -1,1 +1,1 @@
-print("this btter lol")
+print("no this btter lol like pro")
