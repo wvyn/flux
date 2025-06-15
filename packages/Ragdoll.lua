@@ -1,0 +1,1 @@
+print("no this btter lol like pro")
