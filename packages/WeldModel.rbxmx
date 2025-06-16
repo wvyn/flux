@@ -1,0 +1,57 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXE31ZBEJJ7DH0ZSLE4Z23QNC27IM4RP31">
+        <Properties>
+            <string name="Name">WeldModel</string>
+            <string name="ScriptGuid">{054998d8-4fab-41ae-85fa-affdcc7e6ea3}</string>
+            <ProtectedString name="Source"><![CDATA[return function(
+	model: Model,
+	weldOptions: {
+		root: BasePart?,
+		partProperties: {
+			Anchored: boolean?,
+			CanCollide: boolean?,
+			CanTouch: boolean?,
+			CanQuery: boolean?,
+			Material: Enum.Material?,
+			Color: Color3?,
+			CastShadow: boolean?,
+			Reflectance: number?,
+			Locked: boolean?,
+			Massless: boolean?,
+
+			UsePartColor: boolean?
+		}?
+	}?
+)
+	if not weldOptions then weldOptions = {} end
+	local root: BasePart = weldOptions.root or model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+	assert(root, "No root part to weld to.")
+
+	local partProperties = weldOptions.partProperties
+
+	for _, part: Instance in next, model:GetDescendants() do
+		if part:IsA("BasePart") then
+			local weld = Instance.new("Weld")
+			weld.Name = part.Name
+			weld.Part0 = root
+			weld.Part1 = part
+			weld.C0 = weld.Part0.CFrame:Inverse() * weld.Part1.CFrame
+			weld.Parent = root
+
+			if partProperties then
+				for propertyName, propertyValue in next, partProperties do
+					part[propertyName] = propertyValue
+				end
+			end
+		end
+	end
+
+	return {
+		Model = model,
+		Root = root
+	}
+end]]></ProtectedString>
+        </Properties>
+    </Item>
+</roblox>
