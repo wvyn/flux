@@ -1,0 +1,42 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXZPWL83ECDQNQYS4WYVTGYIBZMN55BYMJ">
+        <Properties>
+            <string name="Name">3DTriangles</string>
+            <string name="ScriptGuid">{13e3fd11-440a-45dd-aeb4-bf4ee0348be4}</string>
+            <ProtectedString name="Source"><![CDATA[local Triangles = {}
+local wedge = Instance.new("WedgePart");
+wedge.Anchored = true;
+wedge.CanCollide = false;
+wedge.TopSurface = Enum.SurfaceType.Smooth;
+wedge.BottomSurface = Enum.SurfaceType.Smooth;
+
+function Triangles.new(a, b, c)
+	local ab, ac, bc = b - a, c - a, c - b;
+	local abd, acd, bcd = ab:Dot(ab), ac:Dot(ac), bc:Dot(bc);
+	if (abd > acd and abd > bcd) then
+		c, a = a, c;
+	elseif (acd > bcd and acd > abd) then
+		a, b = b, a;
+	end
+	ab, ac, bc = b - a, c - a, c - b;
+	local right = ac:Cross(ab).unit;
+	local up = bc:Cross(right).unit;
+	local back = bc.unit;
+	local height = math.abs(ab:Dot(up));
+	local w1 = wedge:Clone();
+	w1.Name = "WedgeA"
+	w1.Size = Vector3.new(0, height, math.abs(ab:Dot(back)));
+	w1.CFrame = CFrame.fromMatrix((a + b)/2, right, up, back);
+	w1.Parent = workspace;
+	local w2 = wedge:Clone();
+	w2.Name = "WedgeB"
+	w2.Size = Vector3.new(0, height, math.abs(ac:Dot(back)));
+	w2.CFrame = CFrame.fromMatrix((a + c)/2, -right, up, -back);
+	w2.Parent = workspace;
+	return w1, w2;
+end
+return Triangles]]></ProtectedString>
+        </Properties>
+    </Item>
+</roblox>
