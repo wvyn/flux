@@ -1,0 +1,2679 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXZDYZNIKVD6H15RU8CI70CQV2AL6C01M7">
+        <Properties>
+            <string name="Name">Wyverion</string>
+            <string name="ScriptGuid">{c0f656d3-0f6d-436d-b7b5-2ab028c7b0c3}</string>
+            <ProtectedString name="Source"><![CDATA[--[[
+Wyverion 1.2.4
+
+Publisher: Wyverion 2025 (c)
+Developer: Wyvern
+
+ _ _ _                     
+| | | |_ _ _ _ ___ ___ ___ 
+| | | | | | | | -_|  _|   |
+|_____|_  |\_/|___|_| |_|_|
+      |___|   
+
+]]
+
+--!strict
+
+local Wyverion = {
+	Host = "http://127.0.0.1:3000",
+}
+
+script:SetAttribute("Host", Wyverion.Host)
+Wyverion.Services = {
+	Discord = require("./Wyverion/Discord"),
+	JSONCloud = require("./Wyverion/JSONCloud"),
+	Google = require("./Wyverion/Google"),
+	Servers = require("./Wyverion/Servers")
+}
+
+--[[
+<code><strong>Wyverion:SetHost()</strong></code>
+Set the Host URL for <strong>Wyverion</strong>. This is required in order for Wyverion Service to work.
+]]
+function Wyverion:SetHost(url: string)
+	self.Host = url
+	script:SetAttribute("Host", Wyverion.Host)
+	return true
+end
+
+--[[
+<code><strong>Wyverion:GetService()</strong></code>
+Acquire a Service from <strong>Wyverion</strong>
+]]
+
+return Wyverion]]></ProtectedString>
+        </Properties>
+        <Item class="ModuleScript" referent="RBXOBOBY7SL4VEAKPPK0N03CLTGCY8P6QQF">
+            <Properties>
+                <string name="Name">Discord</string>
+                <string name="ScriptGuid">{b84a6db8-bcf3-4b1c-bfff-c354c9bb8aae}</string>
+                <ProtectedString name="Source"><![CDATA[--[[
+Wyverion Discord 0.7.2
+
+Publisher: Wyverion 2025 (c)
+Developer: Wyvern
+]]
+
+--!strict
+
+local httpService = game:GetService("HttpService")
+
+local Wyverion = script.Parent
+
+local types = require("./Discord/types.d")
+local GatewayIntentBits = require("./Discord/GatewayIntentBits")
+
+-- Secret Code for API, if compromised must be changed on the server (Web) and Roblox (Here)
+local Authentication = "WYVERION.d8e7ff4df59742f5aa3fd162217d2a0450b97b28b48db58fa114c5c0e2c42810.e1ba4807a15d8579f79cfd90a07fc015e6125565c9271eb94aded0b2ebf86163"
+
+local Discord = {
+	GatewayIntentBits = GatewayIntentBits
+}
+
+local ClientMethods = {
+	guilds = {},
+	users = {},
+	channels = {}
+}
+
+function ClientMethods:close()
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/client/close`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			Token = self.token,
+		})
+	})
+	
+	local User = httpService:JSONDecode(response.Body).user :: types.User
+	return User, response
+end
+
+local MessageMethods = {}
+function MessageMethods:delete()
+	local self: types.DiscordClient, message: types.Message = self[1], self[2]
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/channel/message/delete`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			Token = self.token,
+			channelId = message.channelId,
+			messageId = message.id
+		})
+	})
+
+	local Message = httpService:JSONDecode(response.Body).message :: types.Message
+	if Message then
+		for name, func in next, MessageMethods :: any do
+			(Message :: any)[name] = setmetatable({}, { 
+				__index = function(_, index)
+					return function(...)
+						return rawget(func :: any, index)({ self, Message }, ...)
+					end
+				end
+			})
+		end
+	end
+	
+	return Message, response
+end
+
+local ChannelMethods = {
+	messages = {}
+}
+
+function ChannelMethods.messages:get(messageId: string)
+	assert(messageId, "MessageId not provided.")
+	
+	local self: types.DiscordClient, channel: types.Channel = self[1], self[2]
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/channel/message/get`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			Token = self.token,
+			channelId = channel.id,
+			messageId = messageId
+		})
+	})
+
+	local Message = httpService:JSONDecode(response.Body).message :: types.Message
+	if Message then
+		for name, func in next, MessageMethods :: any do
+			(Message :: any)[name] = setmetatable({}, { 
+				__index = function(_, index)
+					return function(...)
+						return rawget(func :: any, index)({ self, Message }, ...)
+					end
+				end
+			})
+		end
+	end
+
+	return Message, response
+end
+
+function ChannelMethods.messages:delete(messageId: string)
+	assert(messageId, "MessageId not provided.")
+	
+	local self: types.DiscordClient, channel: types.Channel = self[1], self[2]
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/channel/message/delete`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			Token = self.token,
+			channelId = channel.id,
+			messageId = messageId
+		})
+	})
+
+	local Message = httpService:JSONDecode(response.Body).message :: types.Message
+	if Message then
+		for name, func in next, MessageMethods :: any do
+			(Message :: any)[name] = setmetatable({}, { 
+				__index = function(_, index)
+					return function(...)
+						return rawget(func :: any, index)({ self, Message }, ...)
+					end
+				end
+			})
+		end
+	end
+	
+	return Message, response
+end
+
+function ChannelMethods.messages:send(content: string?, embeds: { types.Embed }?)
+	assert(content, "Content not provided.")
+	
+	local self: types.DiscordClient, channel: types.Channel = self[1], self[2]
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/channel/message/send`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			Token = self.token,
+			channelId = channel.id,
+			content = content,
+			embeds = embeds
+		})
+	})
+
+	local Message = httpService:JSONDecode(response.Body).message :: types.Message
+	if Message then
+		for name, func in next, MessageMethods :: any do
+			(Message :: any)[name] = setmetatable({}, { 
+				__index = function(_, index)
+					return function(...)
+						return rawget(func :: any, index)({ self, Message }, ...)
+					end
+				end
+			})
+		end
+	end
+	
+	return Message, response
+end
+
+function ClientMethods.channels:list(guildId: string)
+	if self[2] then self, guildId = self[1], self[2].id else assert(guildId, "GuildId not provided") end
+	
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/guild/channels`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			Token = (self :: types.DiscordClient).token,
+			guildId = guildId
+		})
+	})
+	
+	local Channels = httpService:JSONDecode(response.Body).channels :: { types.Channel }
+	if Channels then
+		for _, Channel in next, Channels do
+			for name, func in next, ChannelMethods :: any do
+				(Channel :: any)[name] = setmetatable({}, { 
+					__index = function(_, index)
+						return function(...)
+							return rawget(func :: any, index)({ self, Channel }, ...)
+						end
+					end
+				})
+			end
+		end
+	end
+
+	return Channels, response
+end
+
+function ClientMethods.channels:get(channelId: string)
+	if self[2] then self, channelId = self[1], self[2].id else assert(channelId, "ChannelId not provided") end
+	
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/channel`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			Token = (self :: types.DiscordClient).token,
+			channelId = channelId
+		})
+	})
+
+	local Channel = httpService:JSONDecode(response.Body).channel :: types.Channel
+	if Channel then
+		for name, func in next, ChannelMethods :: any do
+			(Channel :: any)[name] = setmetatable({}, { 
+				__index = function(_, index)
+					return function(...)
+						return rawget(func :: any, index)({ self, Channel }, ...)
+					end
+				end
+			})
+		end
+	end
+	
+	return Channel, response
+end
+
+function ClientMethods.users:get(userId: string)
+	assert(userId, "UserId not provided.")
+	
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/user`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			Token = self.token,
+			userId = userId
+		})
+	})
+
+	local User = httpService:JSONDecode(response.Body).user :: types.User
+	return User, response
+end
+
+function ClientMethods.users:send(userId: string, content: string?, embeds: { types.Embed }?)
+	assert(userId, "UserId not provided.")
+	assert(content, "Content not provided.")
+	
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/user/send`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			Token = self.token,
+			userId = userId,
+			content = content,
+			embeds = embeds
+		})
+	})
+
+	local Message = httpService:JSONDecode(response.Body).message :: types.Message
+	if Message then
+		for name, func in next, MessageMethods :: any do
+			(Message :: any)[name] = setmetatable({}, { 
+				__index = function(_, index)
+					return function(...)
+						return rawget(func :: any, index)({ self, Message }, ...)
+					end
+				end
+			})
+		end
+	end
+	return Message, response
+end
+
+local MemberMethods = {
+	roles = {}
+}
+
+function MemberMethods.roles:list()
+	local self: types.DiscordClient, member: types.Member = self[1], self[2]
+
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/guild/roles`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			Token = self.token,
+			guildId = member.guild.id,
+			userId = member.user.id
+		})
+	})
+
+	local Roles = httpService:JSONDecode(response.Body).roles :: { types.Role }
+	return Roles, response
+end
+
+function MemberMethods:setNickname(nickname: string, reason: string?)
+	local self: types.DiscordClient, member: types.Member = self[1], self[2]
+
+	local response: types.HTTPResponse = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/guild/member/name`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			Token = self.token,
+			guildId = member.guild.id,
+			userId = member.user.id,
+			nickname = nickname,
+			reason = reason
+		})
+	})
+	
+	return response.Success, response
+end
+
+local GuildMethods = {
+	members = {},
+	roles = {},
+	channels = ClientMethods.channels
+}
+
+function GuildMethods.members:get(userId: string)
+	local self: types.DiscordClient, guild: types.Guild = self[1], self[2]
+
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/guild/member`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			Token = self.token,
+			guildId = guild.id,
+			userId = userId
+		})
+	})
+
+	local Member = httpService:JSONDecode(response.Body).member :: types.Member
+	if Member then
+		for name, func in next, MemberMethods :: any do
+			(Member :: any)[name] = setmetatable({}, { 
+				__index = function(_, index)
+					return function(...)
+						return rawget(func :: any, index)({ self, Member }, ...)
+					end
+				end
+			})
+		end
+	end
+	
+	return Member, response
+end
+
+function GuildMethods.roles:list()
+	local self: types.DiscordClient, guild: types.Guild = self[1], self[2]
+	
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/guild/roles`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			Token = self.token,
+			guildId = guild.id
+		})
+	})
+
+	local Roles = httpService:JSONDecode(response.Body).roles :: { types.Role }
+	return Roles, response
+end
+
+function GuildMethods.roles:add(userId: string, roleId: string)
+	assert(userId, "UserId not provided.")
+	assert(roleId, "RoleId not provided.")
+	
+	local self: types.DiscordClient, guild: types.Guild = self[1], self[2]
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/guild/role/add`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			Token = self.token,
+			userId = userId,
+			guildId = guild.id,
+			roleId = roleId
+		})
+	})
+
+	local Role = httpService:JSONDecode(response.Body).role :: types.Role
+	return Role, response
+end
+
+function GuildMethods.roles:remove(userId: string, roleId: string)
+	assert(userId, "UserId not provided.")
+	assert(roleId, "RoleId not provided.")
+	
+	local self: types.DiscordClient, guild: types.Guild = self[1], self[2]
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/guild/role/remove`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			Token = self.token,
+			userId = userId,
+			guildId = guild.id,
+			roleId = roleId
+		})
+	})
+
+	local Role = httpService:JSONDecode(response.Body).role :: types.Role
+	return Role, response
+end
+
+function ClientMethods.guilds:list()
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/client/guilds`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			Token = (self :: any).token,
+		})
+	})
+
+	local Guilds = httpService:JSONDecode(response.Body).guilds :: { types.Guild }
+	if Guilds then
+		for _, Guild in next, Guilds do
+			for name, func in next, GuildMethods :: any do
+				(Guild :: any)[name] = setmetatable({}, { 
+					__index = function(_, index)
+						return function(...)
+							return rawget(func :: any, index)({ self, Guild }, ...)
+						end
+					end
+				})
+			end
+		end
+	end
+
+	return Guilds, response
+end
+
+function ClientMethods.guilds:get(guildId: string)
+	assert(guildId, "GuildId not provided.")
+	
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/guild`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			Token = self.token,
+			guildId = guildId,
+		})
+	})
+	
+	local Guild = httpService:JSONDecode(response.Body).guild :: types.Guild
+	if Guild then
+		for name, func in next, GuildMethods :: any do
+			(Guild :: any)[name] = setmetatable({}, { 
+				__index = function(_, index)
+					return function(...)
+						return rawget(func :: any, index)({ self, Guild }, ...)
+					end
+				end
+			})
+		end
+	end
+	
+	return Guild, response
+end
+
+local DiscordMethods = { Client = ClientMethods	}
+
+export type DiscordMethods = typeof(DiscordMethods)
+
+Discord.new = function(instance: types.DiscordInstance, options: types.DiscordNewOptions)
+	assert(instance, "Discord Instance not provided.")
+	assert(options, "Options not provided.")
+	
+	assert(options.token, "options.token not provided.")
+	assert(options.intents, "options.intents not provided.")
+	
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/client`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			Token = options.token
+		})
+	})
+
+	assert(response.Success, "Error occurred when creating a new Discord Instance.")
+
+	local DiscordClient: types.DiscordClient = {
+		user = httpService:JSONDecode(response.Body).user,
+		isBot = options.isBot or true,
+		intents = options.intents,
+		token = options.token,
+
+		guilds = {} :: any,
+		users = {} :: any,
+		channels = {} :: any,
+
+		close = nil :: any
+	}
+
+	for name, methods in next, ClientMethods :: any do
+		if typeof(methods) == "function" then
+			(DiscordClient :: any)[name] = function(...)
+				return (methods :: any)(DiscordClient, ...)
+			end
+		else
+			setmetatable((DiscordClient :: any)[name], { 
+				__index = function(_, index)
+					return function(...)
+						return rawget(methods :: any, index)(DiscordClient, ...)
+					end
+				end
+			})
+		end
+	end
+
+	return DiscordClient, response
+end :: typeof(types.methods.discord.new)
+
+return Discord]]></ProtectedString>
+            </Properties>
+            <Item class="ModuleScript" referent="RBXRHG6J0P7451IA3WGRZH8CBXPZWIAGJDZ">
+                <Properties>
+                    <string name="Name">types.d</string>
+                    <string name="ScriptGuid">{48edcdc9-2136-464b-8bc4-90e4f3d4ede4}</string>
+                    <ProtectedString name="Source"><![CDATA[local GatewayIntentBits = require("./GatewayIntentBits")
+export type DiscordInstance = "Client"
+
+local methods = {
+	discord = {
+		--[[
+			<code><strong>Wyverion.Discord.new()</strong></code>
+			Use <strong>Wyverion</strong> to create a new Discord Instance.
+			<em>Currently only creating bot clients are supported</em>
+			-----------------------------------------------------------
+			@param instance <code>string</code> - The type of Discord instance to create.
+			@param options <code>{ isBot: true?, token: string, intents: [ number ] }</code> - The options for the instance.
+			@returns <code>Discord Client</code> - The created Discord instance.
+			@returns  <code>response</code> - HTTP response for the request
+		]]
+		new = function(instance: DiscordInstance, options: DiscordNewOptions): (DiscordClient, HTTPResponse) end
+	},
+	client = {
+		--[[
+			<code><strong>Wyverion.Discord.client.close()</strong></code>
+			Close a bot.
+			-----------------------------------------------------------
+			@returns <code>User</code> - The user for the closed bot
+			@returns  <code>response</code> - HTTP response for the request
+		]]
+		close = function(): (User?, HTTPResponse) end,
+		guilds = {
+			--[[
+				<code><strong>Wyverion.Discord.client.guilds.get()</strong></code>
+				Get a guild from the discord client.	
+				-----------------------------------------------------------
+				@returns <code>Guild</code> - The returned guild.
+				@returns  <code>response</code> - HTTP response for the request
+			]]
+			get = function(guildId: string): (Guild?, HTTPResponse) end,
+			--[[
+				<code><strong>Wyverion.Discord.client.guilds.list()</strong></code>
+				List guilds
+				-----------------------------------------------------------
+				@returns <code>{ Guild }</code> - The returned Guilds.
+				@returns  <code>response</code> - HTTP response for the request
+			]]
+			list = function(): ({ Guild? }, HTTPResponse) end,
+		},
+		users = {
+			--[[
+				<code><strong>Wyverion.Discord.client.users.get()</strong></code>
+				Get a user from a given UserId
+				-----------------------------------------------------------
+				@returns <code>User</code> - The returned user.
+				@returns  <code>response</code> - HTTP response for the request
+			]]
+			get = function(userId: string): (User?, HTTPResponse) end,
+			--[[
+				<code><strong>Wyverion.Discord.client.users.send()</strong></code>
+				Send a user a message from a given UserId, if you're doing an embed the color parameter is a hexadecimal. For example: "#3498db"
+				-----------------------------------------------------------
+				@param content <code>string?</code> - The regular string content
+				@param embeds <code>{ title: string?, description: string?, color: string?, timestamp: (boolean | number)?, url: string?, thumbnail: string?, fields: { name: string, value: string, inline: boolean? }?, image: string?, footer: { name: string, iconURL: string }? }[]</code> - Embeds for the bot to send
+				@returns <code>Message</code> - The returned message.
+				@returns  <code>response</code> - HTTP response for the request
+			]]
+			send = function(userId: string, content: string?, embeds: { Embed }?): (Message, HTTPResponse) end
+		},
+		channels = {
+			--[[
+				<code><strong>Wyverion.Discord.client.channels.get()</strong></code>
+				Get a channel from a given ChannelId
+				-----------------------------------------------------------
+				@returns <code>Channel</code> - The returned channel.
+				@returns  <code>response</code> - HTTP response for the request
+			]]
+			get = function(userId: string): (Channel?, HTTPResponse) end,
+			--[[
+				<code><strong>Wyverion.Discord.client.channels.list()</strong></code>
+				List channels of a guildId
+				-----------------------------------------------------------
+				@param guildId <code>string</code> - The guildId channels to list
+				@returns <code>{ Channel }</code> - The returned channels.
+				@returns  <code>response</code> - HTTP response for the request
+			]]
+			list = function(guildId: string): ({ Channel? }, HTTPResponse) end,
+		},
+	},
+	guildChannel = { 
+		--[[
+			<code><strong>Wyverion.Discord.client.channels.list()</strong></code>
+			List channels of a guild
+			-----------------------------------------------------------
+			@returns <code>{ Channel }</code> - The returned channels.
+			@returns  <code>response</code> - HTTP response for the request
+		]]
+		list = function(): ({ Channel? }, HTTPResponse) end 
+	},
+	member = {
+		--[[
+				<code><strong>Wyverion.Discord.client.guild.member.setNickname()</strong></code>
+				Set a member nickname
+				-----------------------------------------------------------
+				@param nickname <code>string</code> - The nickname to set the member to.
+				@param reason <code>string?</code> - Optional reason for the action
+				@returns  <code>boolean</code> - boolean indicating it was successful
+				@returns  <code>response</code> - HTTP response for the request
+			]]
+		setNickname = function(nickname: string, reason: string?): (boolean, HTTPResponse) end,
+		--[[
+			<code><strong>Wyverion.Discord.client.guild.member.roles.list()</strong></code>
+			List roles of a Member
+			-----------------------------------------------------------
+			@returns <code>{ Role }</code> - The returned roles.
+			@returns  <code>response</code> - HTTP response for the request
+		]]
+		roles = {
+			list = function(): ({ Role? }, HTTPResponse) end,	
+		}
+	},
+	guild = {
+		members = {
+			--[[
+				<code><strong>Wyverion.Discord.client.guild.members.get()</strong></code>
+				Get a member from a given UserId
+				-----------------------------------------------------------
+				@returns <code>User</code> - The returned user.
+				@returns  <code>response</code> - HTTP response for the request
+			]]
+			get = function(memberId: string): (Member?, HTTPResponse) end,
+		},
+		roles = {
+			--[[
+				<code><strong>Wyverion.Discord.client.guild.roles.add()</strong></code>
+				Add a role to a user.
+				-----------------------------------------------------------
+				@returns <code>Role</code> - The returned Role.
+				@returns  <code>response</code> - HTTP response for the request
+			]]
+			add = function(userId: string, roleId: string): (Role?, HTTPResponse) end,
+			--[[
+				<code><strong>Wyverion.Discord.client.guild.roles.remove()</strong></code>
+				Remove a role to a user
+				-----------------------------------------------------------
+				@returns <code>Role</code> - The returned Role.
+				@returns  <code>response</code> - HTTP response for the request
+			]]
+			remove = function(userId: string, roleId: string): (Role?, HTTPResponse) end,
+			--[[
+				<code><strong>Wyverion.Discord.client.guild.roles.list()</strong></code>
+				List roles of a guild
+				-----------------------------------------------------------
+				@returns <code>{ Role }</code> - The returned roles.
+				@returns  <code>response</code> - HTTP response for the request
+			]]
+			list = function(): ({ Role? }, HTTPResponse) end,
+		}
+	},
+	message = {
+		--[[
+				<code><strong>Wyverion.Discord.client.channel.messages.delete()</strong></code>
+				Delete a message from a channel.
+				-----------------------------------------------------------
+				@returns <code>Message</code> - The returned deleted Message.
+				@returns  <code>response</code> - HTTP response for the request
+			]]
+		delete = function(): (Message?, HTTPResponse) end
+	},
+	channel = {
+		messages = {
+			--[[
+				<code><strong>Wyverion.Discord.client.channel.messages.send()</strong></code>
+				Send a message to a channel, if you're doing an embed the color parameter is a hexadecimal. For example: "#3498db"
+				-----------------------------------------------------------
+				@param content <code>string?</code> - The regular string content
+				@param embeds <code>{ title: string?, description: string?, color: string?, timestamp: (boolean | number)?, url: string?, thumbnail: string?, fields: { name: string, value: string, inline: boolean? }?, image: string?, footer: { name: string, iconURL: string }? }[]</code> - Embeds for the bot to send
+				@returns <code>Message</code> - The returned Message.
+				@returns  <code>response</code> - HTTP response for the request
+			]]
+			send = function(content: string?, embeds: { Embed }?): (Message?, HTTPResponse) end,
+			--[[
+				<code><strong>Wyverion.Discord.client.channel.messages.send()</strong></code>
+				Get a message from a channel.
+				-----------------------------------------------------------
+				@returns <code>Message</code> - The returned Message.
+				@returns  <code>response</code> - HTTP response for the request
+			]]
+			get = function(messageId: string): (Message?, HTTPResponse) end,
+			--[[
+				<code><strong>Wyverion.Discord.client.channel.messages.delete()</strong></code>
+				Delete a message from a channel.
+				-----------------------------------------------------------
+				@returns <code>Message</code> - The returned deleted Message.
+				@returns  <code>response</code> - HTTP response for the request
+			]]
+			delete = function(messageId: string): (Message?, HTTPResponse) end
+		}
+	},
+}
+
+export type DiscordNewOptions = {
+	isBot: true?,
+	token: string,
+	intents: { index<typeof(GatewayIntentBits), keyof<typeof(GatewayIntentBits)>> }
+}
+
+export type Role = {
+	color: number,
+	createdTimestamp: number,
+	hexColor: string,
+	id: string,
+	icon: string?,
+	iconURL: string?,
+	name: string,
+	position: number
+}
+
+export type Guild = {
+	read id: string,
+	read afkChannelId: string?,
+	read approximateMemberCount: string?,
+	read approximatePresenceCount: string?,
+	read createdTimestamp: number,
+	read description: string?,
+	read icon: string?,
+	read iconURL: string?,
+	read joinedTimestamp: number,
+	read ownerId: string,
+	read name: string,
+	read nameAcronym: string,
+
+	read channels: typeof(methods.guildChannel) & typeof(methods.client.channels),
+	read roles: typeof(methods.guild.roles),
+	read members: typeof(methods.guild.members)
+}
+
+export type HTTPResponse = {
+	Body: string,
+	Headers: { 
+		connection: string,
+		["content-length"]: string,
+		["content-type"]: string,
+		date: string,
+		etag: string,
+		["keep-alive"]: string,
+		["x-powered-by"]: string
+	},
+	StatusCode: number,
+	StatusMessage: string,
+	Success: boolean
+}
+
+export type User = {
+	read accentColor: number?,
+	read bot: boolean,
+	read avatar: string?,
+	read tag: string,
+	read verified: boolean?,
+	read avatarURL: string?,
+	read displayAvatarURL: string?,	
+	read mfaEnabled: boolean?,
+	read displayName: string,
+	read username: string,
+	read id: string
+}
+
+export type Member = {
+	read id: string,
+	read nickname: string,
+	read user: User,
+	read guild: Guild,
+	
+	read setNickName: typeof( methods.member.setNickname),
+	read roles: typeof(methods.member.roles)
+}
+
+export type Message = {
+	read author: User,
+	read channelId: string,
+	read cleanContent: string,
+	read content: string,
+	read createdTimestamp: number,
+	read id: string,
+	read hasThread: boolean,
+	read guildId: string?,
+	read position: number?,
+	read pinned: boolean,
+	
+	read delete: typeof(methods.message.delete)
+}
+
+export type Channel = {
+	read id: string,
+	read name: string,
+	read type: string,
+	read topic: string?,
+	read createdTimestamp: number,
+	read isTextBased: boolean,
+	read isVoiceBased: boolean,
+	read isThread: boolean,
+	read position: number,
+	read guildId: string,
+	read messages: typeof(methods.channel.messages)
+}
+
+export type DiscordClient = {
+	read user: User,
+	read isBot: boolean,
+	read intents: { number },
+	read token: string,
+
+	read guilds: typeof(methods.client.guilds),
+	read users: typeof(methods.client.users),
+	read channels: typeof(methods.client.channels),
+
+	read close: typeof(methods.client.close)
+}
+
+export type Embed = {
+	read title: string?,
+	read description: string?,
+	read color: string?,
+	read timestamp: (boolean | number)?,
+	read author: { name: string, iconURL: string?, url: string? }?,
+	read url: string?,
+	read thumbnail: string?,
+	read fields: { name: string, value: string, inline: boolean? }?,
+	read image: string?,
+	read footer: { name: string, iconURL: string }?
+}
+
+return { methods = methods }]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBX8WO4OGGWA2SRSXN3EAJYA521N1CWQH15">
+                <Properties>
+                    <string name="Name">GatewayIntentBits</string>
+                    <string name="ScriptGuid">{59358827-f748-4219-8a14-97146b41aba0}</string>
+                    <ProtectedString name="Source"><![CDATA[return {
+	Guilds = 1,
+	GuildMembers = 2,
+	GuildModeration = 4,
+	GuildExpressions = 8,
+	GuildIntegrations = 16,
+	GuildWebhooks = 32,
+	GuildInvites = 64,
+	GuildVoiceStates = 128,
+	GuildPresences = 256,
+	GuildMessages = 512,
+	GuildMessageReactions = 1024,
+	GuildMessageTyping = 2048,
+	DirectMessages = 4096,
+	DirectMessageReactions = 8192,
+	DirectMessageTyping = 16384,
+	MessageContent = 32768,
+	GuildScheduledEvents = 65536,
+	AutoModerationConfiguration = 1048576,
+	AutoModerationExecution = 2097152,
+	GuildMessagePolls = 16777216,
+	DirectMessagePolls = 33554432
+	
+}]]></ProtectedString>
+                </Properties>
+            </Item>
+        </Item>
+        <Item class="ModuleScript" referent="RBXUFBCM6WFRZ2O6DEK5XL5174HR5I3UI5Z">
+            <Properties>
+                <string name="Name">JSONCloud</string>
+                <string name="ScriptGuid">{e95d7c1f-7676-48c3-9fb4-e90e58636d15}</string>
+                <ProtectedString name="Source"><![CDATA[--[[
+JSON Cloud 1.0.0
+
+Publisher: Wyverion 2025 (c)
+Developer: Wyvern
+]]
+
+--!strict
+
+local httpService = game:GetService("HttpService")
+
+local Wyverion = script.Parent
+
+local types = require("./JSONCloud/types.d")
+
+-- Secret Code for API, if compromised must be changed on the server (Web) and Roblox (Here)
+local Authentication = "WYVERION.d8e7ff4df59742f5aa3fd162217d2a0450b97b28b48db58fa114c5c0e2c42810.e1ba4807a15d8579f79cfd90a07fc015e6125565c9271eb94aded0b2ebf86163"
+
+local JSONCloud = {}
+
+local JSONMethods = {}
+
+function JSONMethods:remove(index: string | number)
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/json/remove`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			name = self.name,
+			index = index
+		})
+	})
+end
+
+function JSONMethods:find(value: any)
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/json/find`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			name = self.name,
+			value = value
+		})
+	})
+	
+	return httpService:JSONDecode(response.Body).key
+end
+
+function JSONMethods:delete()
+	httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/json/delete`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			name = self.name
+		})
+	})
+	
+	for i, v in next, self do self[i] = nil end
+	setmetatable(self, {})
+end
+
+function JSONMethods:read()
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/json/read`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			name = self.name
+		})
+	})
+	return httpService:JSONDecode(response.Body)
+end
+
+function JSONMethods:write(data: any)
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/json/write`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			name = self.name,
+			data = httpService:JSONEncode(data)
+		})
+	})
+end
+
+function JSONMethods:get(index: string | number)
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/json/get`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			name = self.name,
+			index = index
+		})
+	})
+
+	return httpService:JSONDecode(response.Body).data
+end
+
+function JSONMethods:push(data: any)
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/json/push`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			name = self.name,
+			data = data
+		})
+	})
+end
+
+function JSONMethods:update(index: string | number, value: any)
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/json/update`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			name = self.name,
+			index = index,
+			value = value
+		})
+	})
+end
+
+JSONCloud.new = function(options: types.JSONCloudNewOptions)
+	assert(options and options.name, "No name provided.")
+	
+	httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/json/load`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			name = options.name
+		})
+	})
+	
+	local JSON = { 
+		name = options.name,
+		read = nil :: any
+	}
+	return 
+		setmetatable(JSON, {
+			__index = function(_, index)
+				return function(...) return JSONMethods[index](JSON, ...) end
+			end
+		})
+end :: types.JSONCloudNew
+
+return JSONCloud]]></ProtectedString>
+            </Properties>
+            <Item class="ModuleScript" referent="RBXR15WTPUFVYYIY4J7LL8Y2SXVAFWVN30Z">
+                <Properties>
+                    <string name="Name">types.d</string>
+                    <string name="ScriptGuid">{62b677e3-cb1c-4650-be4d-cad60b1f0f43}</string>
+                    <ProtectedString name="Source"><![CDATA[local methods = {
+	json = {
+		--[[
+			<code><strong>Wyverion.JSONCloud.new()</strong></code>
+			Create or load a JSON file on the cloud.
+			For the name parameter you do not include the file extension. DO "name" NOT "name.json"
+			-----------------------------------------------------------
+			@param options <code>{ name: string }</code> - The options for the JSON Object
+			@returns <code>JSON</code> - The loaded JSON Object
+		]]
+		new = function(options: JSONCloudNewOptions): JSON end,
+		--[[
+			<code><strong>Wyverion.JSONCloud.JSON.read()</strong></code>
+			Read the whole JSON from the cloud.
+			-----------------------------------------------------------
+			@returns <code>any</code> - The JSON
+		]]
+		read = function(): { any } end,
+		--[[
+			<code><strong>Wyverion.JSONCloud.JSON.write()</strong></code>
+			Write to the Cloud with given data.
+			-----------------------------------------------------------
+			@param data <code>Dictionary | Array</code> - The data to be saved to the JSON
+		]]
+		write = function(data: { any }) end,
+		--[[
+			<code><strong>Wyverion.JSONCloud.JSON.get()</strong></code>
+			Get only a single part of the json
+			-----------------------------------------------------------
+			@param data <code>Dictionary | Array</code> - The data to be saved to the JSON
+		]]
+		get = function(index: string | number): any end,
+		--[[
+			<code><strong>Wyverion.JSONCloud.JSON.push()</strong></code>
+			Push data to the end of a JSON Array
+			-----------------------------------------------------------
+			@param data <code>any</code> - The data to be pushed at the end
+		]]
+		push = function(data: { any }) end,
+		--[[
+			<code><strong>Wyverion.JSONCloud.JSON.update()</strong></code>
+			Update with a index and value pair. Good for JSON Objects.
+			-----------------------------------------------------------
+			@param index <code>string | number</code> - Index to set the value to
+			@param value <code>any</code> - Data
+		]]
+		update = function(index: string | number, data: { any }) end,
+		--[[
+			<code><strong>Wyverion.JSONCloud.JSON.remove()</strong></code>
+			delete with a index and value pair. Good for JSON Objects.
+			-----------------------------------------------------------
+			@param index <code>string | number</code> - Index to delete the value of
+		]]
+		remove = function(index: string | number) end,
+		--[[
+			<code><strong>Wyverion.JSONCloud.JSON.find()</strong></code>
+			Find a index from its value
+			-----------------------------------------------------------
+			@param value <code>any</code> - The value you want to use to find the index of
+		]]
+		find = function(value: any) end,
+		--[[
+			<code><strong>Wyverion.JSONCloud.JSON.delete()</strong></code>
+			Delete the file and destroy the JSON object.
+		]]
+		delete = function() end
+	}
+}
+
+export type JSONCloudNew = typeof(methods.json.new)
+
+export type JSONCloudNewOptions = {
+	name: string
+}
+
+export type JSON = {
+	name: string,
+	
+	read: typeof(methods.json.read),
+	write: typeof(methods.json.write),
+	get: typeof(methods.json.get),
+	push: typeof(methods.json.push),
+	update: typeof(methods.json.update),
+	remove: typeof(methods.json.remove),
+	find: typeof(methods.json.find),
+	delete: typeof(methods.json.delete)
+}
+
+return {}]]></ProtectedString>
+                </Properties>
+            </Item>
+        </Item>
+        <Item class="ModuleScript" referent="RBXIQWX9ZG3G6E2UBNIF8GE3DPBDFPGSQ6Q">
+            <Properties>
+                <string name="Name">Google</string>
+                <string name="ScriptGuid">{b7bcf598-c4a0-4953-9251-48c3fb50d257}</string>
+                <ProtectedString name="Source"><![CDATA[--[[
+Wyverion 1.0.1
+
+Publisher: Wyverion 2025 (c)
+Developer: Wyvern
+]]
+
+--!strict
+
+
+local types = require("./Google/types.d")
+
+local Google = {}
+Google.Services = {
+	SpreadSheets = require("./Google/SpreadSheets")
+}
+
+return Google]]></ProtectedString>
+            </Properties>
+            <Item class="ModuleScript" referent="RBXKFN79CU5NYMWTL1F2TN319EP3HJC0UD0">
+                <Properties>
+                    <string name="Name">types.d</string>
+                    <string name="ScriptGuid">{70fa612e-0dd5-4977-ab41-4cb18a0df12a}</string>
+                    <ProtectedString name="Source"><![CDATA[export type GoogleType = "Spreadsheets"
+
+local methods = {
+	SpreadSheet = {
+		--[[
+			<code><strong>Wyverion.Google.SpreadSheets.new()</strong></code>
+			Use <strong>Wyverion</strong> to create a new SpreadSheet object.
+			-----------------------------------------------------------
+			@param options <code>{ spreadsheetId: string }</code> - The options for the containing sheetId
+			@returns <code>Google SpreadSheet</code> - The created SpreadSheet object.
+		]]
+		new = function(options: SheetNewOptions): SpreadSheet end,
+		--[[
+			<code><strong>Wyverion.Google.SpreadSheet.getValues()</strong></code>
+			Get a value range from a spreadsheet.
+			SheetName being the name of the sheet to read
+			Range example "A1:G3"
+			-----------------------------------------------------------
+			@param options <code>{ sheetName: string, range: string }</code>
+			@returns <code>Google SpreadSheet</code> - The created SpreadSheet object.
+		]]
+		getValues = function(options: GetValuesOptions): SpreadSheetValues? end
+	}
+}
+
+export type SheetNewOptions = {
+	spreadsheetId: string
+}
+
+export type SpreadSheetValues = { { string } }
+export type GetValuesOptions = { sheetName: string, range: string }
+
+export type SpreadSheet = {
+	spreadsheetId: string,
+	getValues: typeof(methods.SpreadSheet.getValues)
+}
+
+return { methods = methods }]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBXDWOYRHNHVBLEZDWNU2SU2C2J9PALELSM">
+                <Properties>
+                    <string name="Name">SpreadSheets</string>
+                    <string name="ScriptGuid">{adc05078-63a3-4173-9d50-dc96d34f694e}</string>
+                    <ProtectedString name="Source"><![CDATA[--[[
+Wyverion 1.0.1
+
+Publisher: Wyverion 2025 (c)
+Developer: Wyvern
+]]
+
+--!strict
+
+local httpService = game:GetService("HttpService")
+
+local types = require("./types.d")
+
+local Wyverion = script.Parent.Parent
+
+-- Secret Code for API, if compromised must be changed on the server (Web) and Roblox (Here)
+local Authentication = "WYVERION.d8e7ff4df59742f5aa3fd162217d2a0450b97b28b48db58fa114c5c0e2c42810.e1ba4807a15d8579f79cfd90a07fc015e6125565c9271eb94aded0b2ebf86163"
+
+local SpreadSheets = {}
+local SpreadSheetMethods = {}
+
+function SpreadSheetMethods:getValues(options: types.GetValuesOptions): types.SpreadSheetValues?
+	local response = httpService:RequestAsync({
+		Url = `{Wyverion:GetAttribute("Host")}/google/sheets/get`,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = httpService:JSONEncode({
+			Authentication = Authentication,
+			spreadsheetId = self.spreadsheetId,
+			sheetName = options.sheetName,
+			range = options.range
+		})
+	})
+	
+	return httpService:JSONDecode(response.Body)
+end
+
+SpreadSheets.new = function(options: types.SheetNewOptions): types.SpreadSheet
+	local SpreadSheet = setmetatable({
+		spreadsheetId = options.spreadsheetId,
+		
+		getValues = nil :: any
+	}, { __index = SpreadSheetMethods })
+	
+	for name, methods in next, SpreadSheetMethods :: any do
+		if typeof(methods) == "function" then
+			(SpreadSheet :: any)[name] = function(...)
+				return (methods :: any)(SpreadSheet, ...)
+			end
+		else
+			setmetatable((SpreadSheet :: any)[name], { 
+				__index = function(_, index)
+					return function(...)
+						return rawget(methods :: any, index)(SpreadSheet, ...)
+					end
+				end
+			})
+		end
+	end
+	
+	return SpreadSheet
+end :: typeof(types.methods.SpreadSheet.new)
+
+return SpreadSheets
+]]></ProtectedString>
+                </Properties>
+            </Item>
+        </Item>
+        <Item class="ModuleScript" referent="RBXUN7GZT25S0J6NZEYV6UQBTIUYLDII8Y2">
+            <Properties>
+                <string name="Name">Servers</string>
+                <string name="ScriptGuid">{c53c383e-f909-4b5f-bddb-0241519269f4}</string>
+                <ProtectedString name="Source"><![CDATA[--[[
+Wyverion Servers 0.10.4.72
+
+Publisher: Wyverion 2025 (c)
+Developer: Wyvern
+]]
+
+local memoryStoreService = game:GetService("MemoryStoreService")
+local messagingService = game:GetService("MessagingService")
+local players = game:GetService("Players")
+
+local types = require("./Servers/servers.d")
+local serverTypes = require("./Servers/Server/server.d")
+
+local Server = require("./Servers/Server")
+local ServerList = require("./Servers/ServerList")
+
+local serverConfig = require("./Servers/server.config")
+
+local ServerCache = {}
+
+local isPrivateServer = game.PrivateServerId ~= ""
+local Servers = { Plugins = require("./Servers/Plugins") }
+
+local ServersMethods = {}
+
+Servers.new = function(options: types.ServersNewOptions)
+	assert(options, "No options provided.")
+	assert(options.placeId, "No placeId provided in options")
+
+	if ServerCache[options.placeId] then return ServerCache[options.placeId] end
+
+	local list = {}
+	local servers = setmetatable({ 
+		placeId = options.placeId,
+		sortedMap = options.sortedMap or memoryStoreService:GetSortedMap(`server:{options.scope or serverConfig.defaultMemoryScope}:{options.placeId}`),
+		
+		list = list,
+	}, { __index = ServersMethods })
+	
+	servers.serverList = ServerList.new(servers) -- set count later
+	ServerCache[servers.placeId] = servers
+
+	return servers
+end :: typeof(types.constructors.new)
+
+function ServersMethods:ReserveServer(options: serverTypes.ReserveServerOptions)
+	return Server.new(self, options)
+end
+
+function ServersMethods:GetServer(privateServerId: string)
+	return Server.fromExisting(self, privateServerId)
+end
+
+function ServersMethods:RemoveServer(privateServerId: string)
+	self.serverList:Remove(privateServerId)
+	self.sortedMap:RemoveAsync(privateServerId)
+end
+
+function Servers._immediatePing()
+	local server = Servers.new{ placeId = game.PlaceId }:GetServer(game:GetService("RunService"):IsStudio() and serverConfig.studioPrivateServerId or game.PrivateServerId)
+	if server then
+		local userIds = {}
+		for _, player in next, players:GetPlayers() do
+			userIds[#userIds + 1] = player.UserId
+		end
+
+		local pingInfo = server:CreatePingInfo()
+		pingInfo.placeId = game.PlaceId
+		messagingService:PublishAsync("server-ping", pingInfo)
+
+		Servers._immediatePingSubscription = messagingService:SubscribeAsync("server-ping", function(response)
+			local data: types.ServersBootMessage = response.Data
+			local servers = Servers.new({ placeId = data.placeId })
+			if servers then
+				local newServer = servers.serverList:Find(data.privateServerId)
+				if newServer then
+					newServer.players = data.players
+				else
+					servers.list[#servers.list + 1] = Server.fromExisting(servers, data.privateServerId, data)
+				end
+			end
+		end)
+	else
+		warn("[Wyverion.Servers] Failed to Immediate Ping, Server got nil")
+	end
+end
+
+if serverConfig.immediatePingOnStartUp then
+	Servers._immediatePing()
+end
+
+return Servers]]></ProtectedString>
+            </Properties>
+            <Item class="ModuleScript" referent="RBXGKN3XFI12LLBYYS0XW85LMJR8E48426V">
+                <Properties>
+                    <string name="Name">servers.d</string>
+                    <string name="ScriptGuid">{82eb1193-dbd5-47e2-96ff-80c8c7c03617}</string>
+                    <ProtectedString name="Source"><![CDATA[local serverTypes = require("./Server/server.d")
+local listTypes = require("./ServerList/list.d")
+
+local constructors = {
+	--[[
+		<code><strong>Wyverion.Servers.new()</strong></code>
+		Create a new Server Interface
+		-----------------------------------------------------
+		@param options <code>{ placeId: number, scope: string?, sortedMap: MemoryStoreSortedMap? }</code> - Server interface options
+		@returns <code>Servers</code> - returns Servers
+	]]
+	new = function(options: ServersNewOptions): Servers end
+}
+
+local methods = {
+	--[[
+		<code><strong>Wyverion.Servers.Interface.ReserveServer()</strong></code>
+		Reserve a new Server for a Place
+		-----------------------------------------------------
+		@param options <code>{ passthrough: any? }</code> - The options for reserving the server.
+		@returns <code>Server</code> - returns the Server
+		-----------------------------------------------------
+		passthrough is additional data to send through with the server
+	]]
+	ReserveServer = function(self: Servers, options: serverTypes.ReserveServerOptions?): serverTypes.Server end,
+	
+	--[[
+		<code><strong>Wyverion.Servers.Interface.GetServer()</strong></code>
+		Get a Server
+		-----------------------------------------------------
+		@param privateServerId <code>string</code> - Private server Id
+		@returns <code>Server</code> - returns the Server
+	]]
+	GetServer = function(self: Servers, privateServerId: string): serverTypes.Server end,
+	
+	--[[
+		<code><strong>Wyverion.Servers.Interface.RemoveServer()</strong></code>
+		Remove a Server from Memory
+		-----------------------------------------------------
+		@param privateServerId <code>string</code> - Private server Id
+		@returns <code>void</code>
+	]]
+	RemoveServer = function(self: Servers, privateServerId: string) end,
+}
+
+export type ListOptions = { count: number }
+
+export type ServersNewOptions = { 
+	placeId: number,
+	scope: string?,
+	sortedMap: MemoryStoreSortedMap?
+}
+
+export type ServersBootMessage = serverTypes.PingInfo & {
+	placeId: number
+}
+
+export type Servers = {
+	read placeId: number,
+	read sortedMap: MemoryStoreSortedMap,
+	
+	read serverList: listTypes.ServerList,
+	read list: { serverTypes.Server },
+	
+	read ReserveServer: typeof(methods.ReserveServer),
+	read RemoveServer: typeof(methods.RemoveServer),
+	read GetServer: typeof(methods.GetServer),
+}
+
+return { constructors = constructors }]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBX2JSI9VDHDGLZ4HWPR4SD6H6KQOWSMXIO">
+                <Properties>
+                    <string name="Name">Server</string>
+                    <string name="ScriptGuid">{55fa69f3-1f87-43d4-aa4c-ebc85e0d21d7}</string>
+                    <ProtectedString name="Source"><![CDATA[--[[
+Wyverion Servers.Server 0.5.1.1
+
+Publisher: Wyverion 2025 (c)
+Developer: Wyvern
+]]
+
+local memoryStoreService = game:GetService("MemoryStoreService")
+local messagingService = game:GetService("MessagingService")
+local teleportService = game:GetService("TeleportService")
+local players = game:GetService("Players")
+
+local Signal = require("../dependancies/Signal")
+
+local serversTypes = require("./servers.d")
+local types = require("./Server/server.d")
+local serverConfig = require("./server.config")
+
+local isStudio = game:GetService("RunService"):IsStudio()
+
+local Server = {}
+local ServerMethods = {}
+
+function ServerMethods:Teleport(options: types.TeleportOptions)
+	local teleportingPlayers = {}
+	for _, user in next, options.users do
+		local player = 
+			typeof(user) == "string" and players:FindFirstChild(user)
+			or typeof(user) == "number" and players:GetPlayerByUserId(user)
+			or typeof(user) == "Instance" and user:IsA("Player") and user
+		if player then
+			teleportingPlayers[#teleportingPlayers + 1] = player
+		end
+	end	
+	
+	if #teleportingPlayers > 0 then
+		teleportService:TeleportToPrivateServer(self.placeId, self.reservedServerAccessCode, teleportingPlayers, options.spawnName, options.teleportData, options.customLoadingScreen)
+	end
+	
+	return teleportingPlayers
+end
+
+function ServerMethods:CreatePingInfo(pingInfo: types.PingInfo?)
+	local newPingInfo = {
+		sent = self.lastPing and self.lastPing.sent or os.time(),
+		expiration = self.config.serverPingExpiration,
+
+		startUNIX = self.startUNIX,
+
+		reservedServerAccessCode = self.reservedServerAccessCode,
+		privateServerId = self.privateServerId,
+
+		jobId = self.jobId,
+
+		players = self.players,
+		passthrough = self.passthrough,
+	}
+	
+	if pingInfo then
+		for i, v in next, pingInfo do
+			newPingInfo[i] = v
+		end
+	end
+	
+	return newPingInfo
+end
+
+function ServerMethods:GetRawPing(data: types.PingInfo?, options: types.PingOptions?)
+	options = options or {}
+	
+	if not data then
+		data = self:CreatePingInfo(data)
+	end
+	
+	if self.privateServerId == (isStudio and serverConfig.studioPrivateServerId or game.PrivateServerId) then
+		data.passthrough = self.passthrough
+	end
+	
+	if not options.host then
+		local users = {}
+		for _, player in next, players:GetPlayers() do
+			users[#users + 1] = player.UserId
+		end; data.players = users
+	end
+	
+	return data
+end
+
+function ServerMethods:GetPing()
+	return self.servers.sortedMap:GetAsync(self.privateServerId)
+end
+
+function ServerMethods:Ping(options: types.PingOptions?)
+	options = options or {}
+	
+	local sent = os.time()
+	local expiration = options.expiration or self.config.serverPingExpiration
+	
+	local userIds = {}
+	for _, player in next, players:GetPlayers() do
+		userIds[#userIds + 1] = player.UserId
+	end; self.players = userIds
+	
+	local ping = self.servers.sortedMap:UpdateAsync(self.privateServerId, function(data)
+		local pingInfo = self:GetRawPing(data, options)
+		pingInfo.sent = sent
+		pingInfo.expiration = expiration
+		task.spawn(function() self.servers.serverList:UpdateFromPingInfo(pingInfo) end)
+		return pingInfo
+	end, expiration)
+	self.lastPing = ping
+	
+	self.signals.onPing:Fire()
+	
+	return ping
+end
+
+function ServerMethods:Listen(callback: (request: types.ServerMessageRequest) -> any)	
+	assert(self.config.serverMessagingEnabled, "Server Messaging is disabled")
+	
+	local onServerMessage: Signal.Signal = self.signals.onServerMessage
+	local connection = onServerMessage:Connect(callback)
+	
+	self.connections.serverMessageSubscription =  messagingService:SubscribeAsync(`{self.placeId}:{self.privateServerId}`, function(request: types.ServerMessageRequest)
+		messagingService:PublishAsync(request.Data.ACK, onServerMessage:Invoke(request))
+	end)
+	
+	return connection
+end
+
+function ServerMethods:Message(protocol: "UDP" | "TCP", message: any, timeout: number?)
+	assert(self.config.serverMessagingEnabled, "Server Messaging is disabled")
+	
+	local resolve, subscription
+	
+	local ACK = protocol == "TCP" and `{self.placeId}:{self.privateServerId}:{math.random()}`
+	if protocol == "TCP" then
+		local thread = coroutine.running()
+		subscription = messagingService:SubscribeAsync(ACK, function(data)
+			resolve = data.Data
+			coroutine.resume(thread)
+		end)
+		
+		task.delay(timeout or self.config.serverMessagingACKTimeout, thread)
+	end
+	
+	messagingService:PublishAsync(`{self.placeId}:{self.privateServerId}`, {
+		message = message,
+		ACK = ACK
+	})
+	
+	if ACK and not resolve then coroutine.yield() end
+	if subscription then subscription:Disconnect() end
+	
+	return resolve
+end
+
+local function getServer(servers: serversTypes.Servers, pingInfo: types.PingInfo)
+	return setmetatable({
+		isServer = true,
+		
+		placeId = servers.placeId,
+
+		startUNIX = pingInfo.startUNIX or 0,
+
+		servers = servers,
+
+		isReserved = true,
+		matchmakingType = Enum.MatchmakingType.Default,
+
+		players = {},
+		signals = {
+			onServerMessage = Signal.new(),
+			onPing = Signal.new()
+		},
+		connections = {},
+
+		reservedServerAccessCode = pingInfo.reservedServerAccessCode,
+		privateServerId = pingInfo.privateServerId,
+		jobId = nil,
+
+		config = table.clone(serverConfig),
+
+		passthrough = pingInfo.passthrough,
+
+		lastPing = pingInfo
+	}, { __index = ServerMethods })
+end
+
+Server._getServer = getServer
+
+function Server.fromExisting(servers: serversTypes.Servers, privateServerId: string, pingInfo: types.PingInfo?): types.Server
+	privateServerId = isStudio and serverConfig.studioPrivateServerId or privateServerId
+	
+	local server, foundIndex = servers.serverList:Find(privateServerId)
+	if server and server.isServer then return server end
+	if privateServerId == "" then return end
+	
+	local serverPing = pingInfo or servers.sortedMap:GetAsync(privateServerId)
+	if not serverPing then return end
+	
+	local newServer = getServer(servers, serverPing)
+	
+	if serverConfig.listAsPingInfo and server then
+		servers.list[foundIndex or #servers.list + 1] = newServer
+	end
+	
+	servers.serverList:UpdateFromPingInfo(newServer.lastPing, newServer)
+	
+	return newServer
+end
+
+function Server.new(servers: serversTypes.Servers, options: types.ReserveServerOptions?): types.Server
+	options = options or {}
+	
+	local reservedServerAccessCode: string, privateServerId: string
+	if isStudio then
+		reservedServerAccessCode, privateServerId = serverConfig.studioReservedServerAccessCode, serverConfig.studioPrivateServerId
+	else
+		reservedServerAccessCode, privateServerId = teleportService:ReserveServer(servers.placeId)
+	end
+	
+	local server = getServer(servers, {
+		reservedServerAccessCode = reservedServerAccessCode,
+		privateServerId = privateServerId,
+		passthrough = options.passthrough,
+		startUNIX = os.time()
+	})
+	
+	server:Ping({ host = true })
+	return server
+end
+
+return Server]]></ProtectedString>
+                </Properties>
+                <Item class="ModuleScript" referent="RBX27R42NKSHHJZGPGDAHX5SAANHCXQWW9J">
+                    <Properties>
+                        <string name="Name">server.d</string>
+                        <string name="ScriptGuid">{bc978579-958b-49e9-8b25-9f1bb1391257}</string>
+                        <ProtectedString name="Source"><![CDATA[local Signal = require("../../dependancies/Signal")
+
+local methods = {
+	--[[
+		<code><strong>Wyverion.Servers.Server.Teleport()</strong></code>
+		Teleport Users to a Server
+		-----------------------------------------------------
+		@param options <code>{ users: { number | string | Player }, spawnName: string?, teleportData: any?, customLoadingScreen: Instance? }</code> - Teleport options
+		@returns <code>{ Player }</code> - Returns the Players that will be teleported within the current server
+	]]
+	Teleport = function(self: Server, options: TeleportOptions): { Player } end,
+	
+	--[[
+		<code><strong>Wyverion.Servers.Server.Message()</strong></code>
+		Send a Message to the specified server
+	]]
+	Message = function(self: Server, protocol: "UDP" | "TCP", message: any, timeout: number?): { any }? end,
+	
+	--[[
+		<code><strong>Wyverion.Servers.Server.Listen()</strong></code>
+		Listen for messages sent to the server
+	]]
+	Listen = function(self: Server, callback: (request: ServerMessageRequest) -> any): Signal.SignalConnection end,
+	
+	--[[
+		<code><strong>Wyverion.Servers.Server.CreatePingInfo()</strong></code>
+		Create Ping Info
+		-----------------------------------------------------
+		@param pingInfo <code>PingInfo</code> - Set specific params of ping info
+		@returns <code>{ sent: number, info: PingInfo }</code> - Returns info about the Ping
+	]]
+	CreatePingInfo = function(self: Server, pingInfo: PingInfo?): PingInfo end,
+	
+	--[[
+		<code><strong>Wyverion.Servers.Server.Ping()</strong></code>
+		Ping the Server to broadcast in the Memory
+		-----------------------------------------------------
+		@param options <code>{ host: boolean?, expiration: number? }</code> - Ping options
+		@returns <code>{ sent: number, info: PingInfo }</code> - Returns info about the Ping
+	]]
+	Ping = function(self: Server, options: PingOptions?): { sent: number, info: PingInfo } end,
+	
+	--[[
+		<code><strong>Wyverion.Servers.Server.GetRawPing()</strong></code>
+		Get raw ping info from data
+		-----------------------------------------------------
+		@returns <code>PingInfo</code> - Returns info about the Ping
+	]]
+	GetRawPing = function(self: Server, data: PingInfo?, options: PingOptions?): PingInfo end,
+	
+	--[[
+		<code><strong>Wyverion.Servers.Server.GetPing()</strong></code>
+		Get recent ping info of the server
+		-----------------------------------------------------
+		@returns <code>PingInfo</code> - Returns info about the Ping
+	]]
+	GetPing = function(self: Server): PingInfo end
+}
+
+export type ReserveServerOptions = { passthrough: any? }
+export type TeleportOptions = {
+	read users: { number | string | Player },
+	
+	read spawnName: string?,
+	read teleportData: any?,
+	read customLoadingScreen: Instance?
+}
+
+export type ServerMessageRequest = { Sent: number, Data: { message: any, ACK: string } }
+
+export type PingOptions = { host: boolean?, expiration: number? }
+export type PingInfo = {
+	read sent: number,
+	read expiration: number,
+	
+	read startUNIX: number,
+	
+	read reservedServerAccessCode: string,
+	read privateServerId: string,
+	read jobId: string?,
+	
+	read players: { Player },
+	
+	read passthrough: any?,
+	
+	read _key: string?
+}
+
+export type Server = {
+	read isServer: boolean,
+	
+	read placeId: number,
+	
+	read config: typeof(require("../server.config")),
+	
+	read startUNIX: number,
+
+	read servers: any,
+
+	read isReserved: boolean,
+	read matchmakingType: Enum.MatchmakingType,
+	
+	read players: { number },
+	read signals: { 
+		onServerMessage: Signal.Signal,
+		onPing: Signal.Signal
+	},
+	read connections: { RBXScriptConnection | Signal.SignalConnection },
+
+	read reservedServerAccessCode: string,
+	read privateServerId: string,
+	read jobId: string?,
+
+	read passthrough: any,
+	
+	read lastPing: PingInfo?,
+	
+	read Teleport: typeof(methods.Teleport),
+	read Message: typeof(methods.Message),
+	read Listen: typeof(methods.Listen),
+	read Ping: typeof(methods.Ping),
+	read CreatePingInfo: typeof(methods.CreatePingInfo),
+	read GetRawPing: typeof(methods.GetRawPing),
+	read GetPing: typeof(methods.GetPing),
+}
+
+return {}]]></ProtectedString>
+                    </Properties>
+                </Item>
+            </Item>
+            <Item class="ModuleScript" referent="RBXCFBE959L2RZ57QO905G0H6YDP584N0Y7">
+                <Properties>
+                    <string name="Name">ServerList</string>
+                    <string name="ScriptGuid">{f4d0ec6b-1c7f-425d-b649-9e8dd9dfed2e}</string>
+                    <ProtectedString name="Source"><![CDATA[local types = require("./ServerList/list.d")
+local serversTypes = require("./servers.d")
+local serverTypes = require("./Server/server.d")
+
+local Server = require("./Server")
+local serverConfig = require("./server.config")
+
+local ServerList = {}
+local ServerListMethods = {}
+
+local isStudio = game:GetService("RunService"):IsStudio()
+
+function ServerListMethods:UpdateFromPingInfo(pingInfo: serverTypes.PingInfo, server: serverTypes.Server?)
+	local privateServerId = pingInfo.privateServerId
+	local list = self.servers.list
+	for index, value in next, list do
+		if value.privateServerId == privateServerId then
+			for i, v in next, pingInfo do
+				value[i] = v
+			end; return true
+		end
+	end
+	
+	if serverConfig.listAsPingInfo then
+		list[#list + 1] = pingInfo
+	else
+		server = server or Server.fromExisting(self.servers, privateServerId, pingInfo)
+		server.lastPing = pingInfo
+
+		if server.privateServerId == (isStudio and serverConfig.studioPrivateServerId or game.PrivateServerId) then
+			server.passthrough = pingInfo.passthrough
+		end
+
+		list[#list + 1] = server
+	end
+	
+	return true
+end
+
+function ServerListMethods:Remove(privateServerId: string)
+	local _, index = self:Find(privateServerId)
+	if index then
+		table.remove(self.servers.list, index)
+		return true
+	end; return false
+end
+
+function ServerListMethods:Find(privateServerId: string)
+	local list = self.servers.list
+	for index, value in next, list do
+		if value.privateServerId == privateServerId then
+			return value, index
+		end
+	end
+end
+
+local isStudio = game:GetService("RunService"):IsStudio()
+function ServerListMethods:UpdateList(count: number?, lowerBound: types.Bound?, upperBound: types.Bound?)
+	local sortedMap: MemoryStoreSortedMap = self.servers.sortedMap
+	local items = sortedMap:GetRangeAsync(Enum.SortDirection.Ascending, count or serverConfig.listFetch, lowerBound, upperBound)
+	
+	local currentTime = os.time()
+	
+	local list = self.servers.list
+	for _, server: serverTypes.Server | serverTypes.PingInfo in next, list do
+		local pingInfo = server.isServer and server.lastPing or server
+		if pingInfo and ((not pingInfo.sent or not pingInfo.expiration) or currentTime >= pingInfo.sent + pingInfo.expiration) then
+			table.remove(list, table.find(list, pingInfo))
+		end
+	end
+
+	for _, pingInfoData: { key: string, value: serverTypes.PingInfo } in next, items do
+		local index = #list + 1
+		local privateServerId = pingInfoData.value.privateServerId
+		local _, foundIndex = self:Find(privateServerId)
+		local pingInfo: serverTypes.PingInfo = pingInfoData.value
+		if serverConfig.listAsPingInfo then
+			if not foundIndex then list[index] = pingInfo end
+		else
+			local server = self.servers:GetServer(pingInfo.privateServerId)
+			if server then
+				server.players = pingInfo.players
+				if pingInfo.privateServerId ~= (isStudio and serverConfig.studioPrivateServerId or game.PrivateServerId) then
+					server.passthrough = pingInfo.passthrough
+				end
+				server.lastPing = pingInfo
+				if not foundIndex then list[index] = server end
+				pingInfo._key = pingInfoData.key
+			else
+				warn("[Wyverion.Servers.ServerList]", "Attempt to get Server from Ping (MemoryStore) got nil")
+			end
+		end
+	end
+	
+	return items
+end
+
+-- make this only send servers
+ServerList.new = function(servers: serversTypes.Servers)
+	return setmetatable({
+		servers = servers,
+	}, { __index = ServerListMethods })
+end :: typeof(types.constructors.new)
+
+return ServerList]]></ProtectedString>
+                </Properties>
+                <Item class="ModuleScript" referent="RBXNJ16P7LNICY8756Z4SOB7A2MIE7KBSFZ">
+                    <Properties>
+                        <string name="Name">list.d</string>
+                        <string name="ScriptGuid">{aa5ed476-d0c8-47d0-a75b-d37b9ff4e73b}</string>
+                        <ProtectedString name="Source"><![CDATA[local serverTypes = require("../Server/server.d")
+
+local constructors = {
+	--[[ Create a new Server List ]]
+	new = function(servers: serversTypes.Servers): ServerList end
+}
+
+export type ServerList = {
+	servers: serversTypes.Servers,
+	sortedMap: MemoryStoreSortedMap,
+	list: { serverTypes.PingInfo },
+	
+	--[[ Update the servers list by editing a single server. ]]
+	UpdateFromPingInfo: typeof(function(self: ServerList, pingInfo: serverTypes.PingInfo, server: serverTypes.Server?): boolean end),
+	
+	--[[ Updates the server lists ]]
+	UpdateList: typeof(function(self: ServerList, count: number?, lowerBound: Bound?, upperBound: Bound?): { { key: string, value: serverTypes.PingInfo } } end),
+	
+	--[[ Finds a server within the serverlist using a privateServerId ]]
+	Find: typeof(function(self: ServerList, privateServerId: string): (number, serverTypes.Server) end),
+	
+	--[[ Remove a server from the serverlist using a privateServerId ]]
+	Remove: typeof(function(self: ServerList, privateServerId: string): boolean end),
+}
+
+export type Bound = { key: string, sortKey: string }
+
+return { constructors = constructors }]]></ProtectedString>
+                    </Properties>
+                </Item>
+            </Item>
+            <Item class="ModuleScript" referent="RBXVTP1CPUI31ZUA9KHOQEGI73D5PLMGJYC">
+                <Properties>
+                    <string name="Name">Plugins</string>
+                    <string name="ScriptGuid">{6e0b5f03-76a5-4342-8aea-fcf9633d75aa}</string>
+                    <ProtectedString name="Source"><![CDATA[--[[
+Plugins made from other Developers and can be imported to Wyverion Servers.
+This can be used to make the code shorter, easier or add new features.
+
+Plugins {
+	PluginName = require("./Plugins/PluginName")
+}
+
+]]
+
+return {
+	GlobalMessages = require("./Plugins/GlobalMessages"),
+	JSONable = require("./Plugins/JSONable"),
+	WTSC = require("./Plugins/WTSC"),
+	ServerCapper = require("./Plugins/ServerCapper"),
+	ServerRouter = require("./Plugins/ServerRouter")
+}]]></ProtectedString>
+                </Properties>
+                <Item class="ModuleScript" referent="RBXAX0SXSS0XVDTKHTIFZCYJJ39G7WWUEXJ">
+                    <Properties>
+                        <string name="Name">WTSC</string>
+                        <string name="ScriptGuid">{3fcacf24-64cc-486b-a432-c713f3d76a75}</string>
+                        <ProtectedString name="Source"><![CDATA[--[[
+WTSC (What's the Server Code?) 0.2.8
+
+A plugin for Wyverion.Servers that allows you reserve, and get servers from a assigned code.
+
+Publisher: Wyverion 2025 (c)
+Developer: Wyvern
+]]
+
+local memoryStoreService = game:GetService("MemoryStoreService")
+local WTSCHashMap = memoryStoreService:GetHashMap("WTSC")
+
+local Server = require("../Server")
+local serversTypes = require("../servers.d")
+local serverTypes = require("../Server/server.d")
+
+local config = require("./WTSC/WTSC.config")
+
+local WTSC = {}
+
+export type Metadata = { pSId: string, pt: any, rASC: string }
+
+function WTSC:GetMetadataFromCode(code: string): Metadata
+	return WTSCHashMap:GetAsync(code)
+end
+
+function WTSC:GetServerFromCode(servers: serversTypes.Servers, code: string)
+	local metadata = WTSC:GetMetadataFromCode(code)
+	return metadata and Server.fromExisting(servers, metadata.pSId, {
+		privateServerId = metadata.pSId,
+		passthrough = metadata.pt,
+		reservedServerAccessCode = metadata.rSAC
+	})
+end
+
+function WTSC:SetServerCode(server: serverTypes.Server, code: string)
+	server.passthrough.serverCode = code
+	
+	WTSCHashMap:SetAsync(code, { 
+		pSId = server.privateServerId,
+		rSAC = server.reservedServerAccessCode,
+		pt = server.passthrough
+	}, config.serverCodeExpiration)
+end
+
+function WTSC:ReserveServer(servers: serversTypes.Servers, code: string, passthrough: { [any]: any })
+	passthrough.serverCode = code
+	local server = servers:ReserveServer{
+		passthrough = passthrough
+	}
+	
+	WTSC:SetServerCode(server, code)
+	
+	return server 
+end
+
+return WTSC]]></ProtectedString>
+                    </Properties>
+                    <Item class="ModuleScript" referent="RBXTHMKQ8394K7VW2HPT0YOTR86EQAUMRC3">
+                        <Properties>
+                            <string name="Name">WTSC.config</string>
+                            <string name="ScriptGuid">{2cff036d-0ad4-47c2-9271-d96c52507ed3}</string>
+                            <ProtectedString name="Source"><![CDATA[return {
+	serverCodeExpiration = 10 * 60^2 -- expiration for server code
+}]]></ProtectedString>
+                        </Properties>
+                    </Item>
+                </Item>
+                <Item class="ModuleScript" referent="RBXAX9GXOR0QX9PJBYSXX7WKUCF7Y4FMBDZ">
+                    <Properties>
+                        <string name="Name">ServerRouter</string>
+                        <string name="ScriptGuid">{ba8ee667-8c27-4048-91ed-a1a01942a853}</string>
+                        <ProtectedString name="Source"><![CDATA[--[[
+Server Router 0.6.1
+
+A plugin for Wyverion.Servers that handles updating server lists.
+
+Publisher: Wyverion 2025 (c)
+Developer: Wyvern
+]]
+local players = game:GetService("Players")
+
+local serversTypes = require("../servers.d")
+local serverTypes = require("../Server/server.d")
+
+local config = require("./ServerRouter/runtime.config")
+local serverConfig = require("../server.config")
+
+local isStudio = game:GetService("RunService"):IsStudio()
+
+local ServerRouter = { _run = false }
+local RouterCache = {}
+
+local _server: serverTypes.Server
+function ServerRouter:Add(servers: serversTypes.Servers)
+	if table.find(RouterCache, servers) then return end
+	RouterCache[#RouterCache + 1] = servers
+end
+
+function ServerRouter:Refresh()
+	for _, servers in next, RouterCache do
+		servers.serverList:UpdateList()
+		if game.PlaceId == servers.placeId then
+			local privateServerId = isStudio and serverConfig.studioPrivateServerId or game.PrivateServerId
+			if not _server then _server = servers:GetServer(privateServerId) end
+			_server:Ping()
+		end
+	end
+end
+
+function ServerRouter:Stop()
+	ServerRouter._run = false
+	return true
+end
+
+--[[ Runs the runtime function for the given server and pings [yields] ]]
+function ServerRouter:Run()
+	if ServerRouter._run then return end
+	ServerRouter._run = true
+	while ServerRouter._run do
+		ServerRouter:Refresh()
+		task.wait(config.updateInterval.Min + (config.updateInterval.Max - config.updateInterval.Min) * math.random())
+	end; ServerRouter._run = false
+end
+
+return ServerRouter]]></ProtectedString>
+                    </Properties>
+                    <Item class="ModuleScript" referent="RBX5RXF0WDY5HCCBH0TSLGHECEP10L5XGEN">
+                        <Properties>
+                            <string name="Name">runtime.config</string>
+                            <string name="ScriptGuid">{2afad2ea-ba4d-416d-a67b-3d596d26d55a}</string>
+                            <ProtectedString name="Source"><![CDATA[return {
+	updateInterval = NumberRange.new(60, 75)
+}]]></ProtectedString>
+                        </Properties>
+                    </Item>
+                </Item>
+                <Item class="ModuleScript" referent="RBXNULOI2TPB8KUDQO5MYR007XVK7T15P51">
+                    <Properties>
+                        <string name="Name">ServerCapper</string>
+                        <string name="ScriptGuid">{e44ff0f9-3c8d-44af-847a-f0582944eb9a}</string>
+                        <ProtectedString name="Source"><![CDATA[--[[
+Server Capper 0.1.0
+
+A plugin for Wyverion.Servers that allows for a custom server cap.
+
+Publisher: Wyverion 2025 (c)
+Developer: Wyvern
+]]
+
+local messagingService = game:GetService("MessagingService")
+local players = game:GetService("Players")
+
+local serversTypes = require("../servers.d")
+local serverTypes = require("../Server/server.d")
+
+local config = require("./ServerCapper/request.config")
+local serverConfig = require("../server.config")
+local Signal = require("../../dependancies/Signal")
+
+local ServerCapper = {}
+ServerCapper.signals = {
+	reserveTeleportCondition = Signal.new()
+}
+
+local thisJobId = game:GetService("RunService"):IsStudio() and serverConfig.studioJobId or game.JobId
+local thisPrivateServerId = game:GetService("RunService"):IsStudio() and serverConfig.studioPrivateServerId or game.PrivateServerId
+
+local reservedPlayers = {}
+
+ServerCapper._subscription = messagingService:SubscribeAsync(`request-teleport:{thisPrivateServerId}`, function(response)
+	local users = players:GetPlayers()
+	local playersLimit = config.maxPlayers >= #users + #response.Data.players + #reservedPlayers
+
+	local allowed = true
+	local reservedResponses = ServerCapper.signals.reserveTeleportCondition:Invoke(response.Data.players)
+	for _, signalResponse in next, reservedResponses do
+		if not signalResponse then 
+			allowed = false
+			break 
+		end
+	end
+
+	local reserved = playersLimit and allowed
+
+	if reserved then
+		ServerCapper:ReserveThisServer(response.Data.players)
+	end
+
+	local userIds = {}
+	for _, player in next, users do
+		userIds[#userIds + 1] = player.UserId
+	end
+
+	return messagingService:PublishAsync(response.Data.id, {
+		reserved = reserved,
+		players = userIds
+	})
+end)
+
+players.PlayerAdded:Connect(function(player)
+	for _, v in next, reservedPlayers do
+		if v[1] == player.UserId then
+			task.cancel(v[2])
+			table.remove(reservedPlayers, table.find(reservedPlayers, v))
+		end
+	end
+end)
+
+function ServerCapper:BindCondition(callback: (users: { number }) -> boolean): Signal.SignalConnection
+	return ServerCapper.signals.reserveTeleportCondition:Connect(callback)
+end
+
+function ServerCapper:ReserveThisServer(userIds: { number })
+	assert(userIds, "userIds not provided.")
+
+	local reservedBinded = {}
+	for _, userId in next, userIds do
+		local _existingReservedInfo
+		for _, v in next, reservedPlayers do
+			if v[1] == userId then 
+				_existingReservedInfo = v
+			end
+		end
+
+		if _existingReservedInfo then task.cancel(_existingReservedInfo[2]) end
+
+		local reservedInfo = _existingReservedInfo or { userId }
+		reservedInfo[2] = task.delay(config.reserveExpiration, function()
+			table.remove(reservedPlayers, table.find(reservedPlayers, reservedInfo))
+		end)
+
+		if not _existingReservedInfo then reservedPlayers[#reservedPlayers + 1] = reservedInfo end
+		reservedBinded[#reservedBinded + 1] = reservedInfo
+	end
+
+	return reservedBinded
+end
+
+function ServerCapper:ReserveTeleportAsync(servers: serversTypes.Servers, privateServerId: string, teleportOptions: serverTypes.TeleportOptions): () -> { Player }?
+	assert(servers, "Servers not provided.")
+
+	assert(privateServerId, "privateServerId not provided.")
+	assert(typeof(privateServerId) == "string", "<privateServerId> expected string.")
+	assert(teleportOptions, "teleportOptions not provdied.")
+
+	local users = teleportOptions.users
+	assert(users, "teleportOptions.users not provided.")
+
+	local userIds = {}
+	for _, user in next, users do
+		if typeof(user) == "number" then
+			userIds[#userIds + 1] = user
+		elseif typeof(user) == "string" then
+			local player: Player = game:GetService("Players"):FindFirstChild(user)
+			if player then userIds[#userIds + 1] = player.UserId end
+		elseif typeof(user) == "Instance" and user:IsA("Player") then
+			userIds[#userIds + 1] = user.UserId
+		end
+	end
+
+	local id = `{thisJobId}:{math.random()}`
+	
+	local thread = coroutine.running()
+	local delayThread = task.delay(config.timeout, function() assert(coroutine.resume(thread)) end)
+	
+	local server = servers:GetServer(privateServerId)
+	
+	local reserved
+	local subscription = messagingService:SubscribeAsync(id, function(response)
+		servers.serverList:UpdateFromPingInfo(server:GetRawPing({ privateServerId = privateServerId, sent = os.time(), players = response.Data.players }, { host = true }))
+		reserved = response.Data.reserved
+		
+		task.cancel(delayThread)
+		if coroutine.status(thread) ~= "dead" then assert(coroutine.resume(thread)) end
+	end)
+
+	messagingService:PublishAsync(`request-teleport:{privateServerId}`, {
+		players = userIds,
+		id = id
+	})
+	
+	if reserved == nil then coroutine.yield() end
+	if subscription and subscription.Disconnect then subscription:Disconnect() end
+	subscription = nil
+	
+	if reserved then
+		return server and function() return server:Teleport(teleportOptions) end
+	end
+end
+
+return ServerCapper]]></ProtectedString>
+                    </Properties>
+                    <Item class="ModuleScript" referent="RBX7F55QE68F12YJ0ZQDA8WOXE98C59NPTG">
+                        <Properties>
+                            <string name="Name">request.config</string>
+                            <string name="ScriptGuid">{1804e798-7019-4fa3-b3c9-0d64fa4fc367}</string>
+                            <ProtectedString name="Source"><![CDATA[return {
+	maxPlayers = game:GetService("Players").MaxPlayers - 4, -- server cap
+	
+	timeout = 5, -- Reserve Teleport timeout
+	reserveExpiration = 60, -- Reserved spot expiring
+}]]></ProtectedString>
+                        </Properties>
+                    </Item>
+                </Item>
+                <Item class="ModuleScript" referent="RBX4U989MXTOCKU17UJ4F8WY7NPQB07VBC9">
+                    <Properties>
+                        <string name="Name">JSONable</string>
+                        <string name="ScriptGuid">{10e0c277-7c58-4b8f-a2c8-db0038b0208e}</string>
+                        <ProtectedString name="Source"><![CDATA[local serversTypes = require("../servers.d")
+
+local JSONable = {}
+
+function JSONable:VoidCycles(t: { [any]: any }, references: { any }?)
+	references = references or { t }
+	
+	local clean = {}
+	for i, v in next, t do
+		if typeof(v) == "table" then
+			if table.find(references, v) then continue end
+			
+			references[#references + 1] = v
+			clean[i] = JSONable:VoidCycles(v, references)
+		else
+			clean[i] = v
+		end
+	end
+	return clean
+end
+
+return JSONable]]></ProtectedString>
+                    </Properties>
+                </Item>
+                <Item class="ModuleScript" referent="RBXKDP991NVVUEYY4H2268KQTAQCH2UNLGH">
+                    <Properties>
+                        <string name="Name">GlobalMessages</string>
+                        <string name="ScriptGuid">{1a3302c5-e785-4b6b-b1cc-78054b4121bd}</string>
+                        <ProtectedString name="Source"><![CDATA[local messagingService = game:GetService("MessagingService")
+
+local Signal = require("../../dependancies/Signal")
+
+local serversTypes = require("../servers.d")
+
+local GlobalMessages = {
+	UDP = {},
+	TCP = {},
+	_subscriptions = {}
+}
+
+-- Listen for global UDP messages
+function GlobalMessages.UDP:Listen(callback: (response: { Data: any, Sent: number }) -> (), channel: string?): Signal.SignalConnection
+	channel = channel or "DEFAULT"
+
+	if not GlobalMessages._subscriptions[channel] then
+		GlobalMessages._subscriptions[channel] = {
+			signal = Signal.new(),
+			subscription = messagingService:SubscribeAsync(`global-message:{channel}`, function(response)
+				GlobalMessages._subscriptions[channel].signal:Fire(response)
+			end)
+		}
+	end
+
+	return GlobalMessages._subscriptions[channel].signal:Connect(callback)
+end
+
+-- Sends a global UDP message to all servers.
+function GlobalMessages.UDP:Message(message: any, channel: string?)
+	messagingService:PublishAsync(`global-message:{channel or "DEFAULT"}`, message)
+end
+
+
+-- Listen for global TCP messages and return a response.
+function GlobalMessages.TCP:Listen(callback: (response: { Data: any, Sent: number }) -> any, channel: string?): Signal.SignalConnection
+	channel = channel or "DEFAULT"
+
+	if not GlobalMessages._subscriptions[channel] then
+		GlobalMessages._subscriptions[channel] = {
+			signal = Signal.new(),
+			subscription = messagingService:SubscribeAsync(`global-tcp-message:{channel}`, function(response)
+				local signalResponses = GlobalMessages._subscriptions[channel].signal:Invoke({ Data = response.Data.data, Sent = response.Sent })
+				
+				local hasResponse = false
+				for _, v in next, signalResponses do if v then hasResponse = true break end end
+				
+				if hasResponse then messagingService:PublishAsync(`global-tcp-ACK:{channel}:{response.Data.ACK}`, signalResponses) end
+			end)
+		}
+	end
+
+	return GlobalMessages._subscriptions[channel].signal:Connect(callback)
+end
+
+-- Sends a global TCP message to all servers and the first response recieved is what is returned.
+function GlobalMessages.TCP:Message(message: any, timeout: number?, channel: string?): ({ Data: { any }, Sent: number })
+	channel = channel or "DEFAULT"
+	
+	local thread = coroutine.running()
+	
+	local subscription
+	local delayThread = task.delay(timeout or 5, function()
+		if subscription then subscription:Disconnect() end
+		assert(coroutine.resume(thread))
+	end)
+	
+	local ACK = math.random()
+	
+	local resolve
+	subscription = messagingService:SubscribeAsync(`global-tcp-ACK:{channel}:{ACK}`, function(response)
+		resolve = response
+		task.cancel(delayThread)
+		assert(coroutine.resume(thread))
+	end)
+	
+	messagingService:PublishAsync(`global-tcp-message:{channel}`, { data =  message, ACK = ACK })
+	
+	if resolve == nil then coroutine.yield() end
+	subscription:Disconnect(); subscription = nil
+	
+	return resolve
+end
+
+return GlobalMessages]]></ProtectedString>
+                    </Properties>
+                </Item>
+            </Item>
+            <Item class="ModuleScript" referent="RBX210J2NEGNXOTM1MASOKIR8Y317UI07O1">
+                <Properties>
+                    <string name="Name">server.config</string>
+                    <string name="ScriptGuid">{3cf76864-d965-4127-8dfb-1958a98486c6}</string>
+                    <ProtectedString name="Source"><![CDATA[-- [Wyverion Servers Configurations] --
+
+local config = {
+	-- [Boot Configurations]
+	immediatePingOnStartUp = true, -- Instantly ping other servers on startup of the server's existence. Default: true
+	defaultMemoryScope = "DEFAULT", -- Specifies the namespace or version of the MemoryStore to use.
+
+	-- [Server Configurations]
+	serverMessagingEnabled = true,-- Enables server-to-server messaging using the method server:Message(protocol, message, timeout). Default: true
+	serverMessagingACKTimeout = 4, -- Timeout (in seconds) before a sent message is considered to have failed due to no acknowledgment (ACK) received. Default: 4
+	serverPingExpiration = 120, -- Time (in seconds) before a server's ping entry is considered expired and removed from the list. Default: 120
+
+	-- [List Configurations]
+	listFetch = 72, -- (1-200) Maximum number of entries to fetch when retrieving the list of available servers.
+	listAsPingInfo = true, -- (BETA) [false]: Stores in (servers.list) as (Wyverion.Server) Instance, [true]: Stores in (servers.list) as (Wyverion.PingInfo) Instance. Storing as a PingInfo will be more efficient than storing as a server.
+
+	-- [Studio Configurations]
+	studioJobId = "Studio-jId", -- Unique identifier for a studio job instance.
+	studioReservedServerAccessCode = "Studio-rSAC", -- Reserved access code for authentication in a studio private server.
+	studioPrivateServerId = "Studio-pSId" -- Unique identifier for a private studio server session.
+}
+
+return config]]></ProtectedString>
+                </Properties>
+            </Item>
+        </Item>
+        <Item class="Folder" referent="RBXH1D6MI42YEVBP7N0WCTLIPDRDSHMA2HI">
+            <Properties>
+                <string name="Name">dependancies</string>
+            </Properties>
+            <Item class="ModuleScript" referent="RBXWEJ549CCCKNJ9G5EUV0NJB41IKGZ829R">
+                <Properties>
+                    <string name="Name">Signal</string>
+                    <string name="ScriptGuid">{a4cd8583-188c-46fc-9455-e8b3b4f0bcc3}</string>
+                    <ProtectedString name="Source"><![CDATA[local SignalConstructor = {}
+local SignalMethods = {}
+
+local tableRemove = table.remove
+local tableFind = table.find
+
+local coroutineRunning = coroutine.running
+local coroutineYield = coroutine.yield
+
+local taskDelay = task.delay
+local taskCancel = task.cancel
+
+function SignalConstructor.new()
+	return setmetatable({ _connections = {} :: { SignalConnection } }, { __index = SignalMethods })
+end
+
+local taskSpawn = task.spawn
+function SignalMethods:Fire<parameters...>(...: parameters...): parameters...
+	for _, connection in next, self._connections do
+		taskSpawn(connection[1], ...)
+	end; return ...
+end
+
+function SignalMethods:Invoke<parameters...>(...: parameters...): { any }
+	local responses = {}
+	for _, connection in next, self._connections do
+		responses[#responses + 1] = connection[1](...) or false
+	end; return responses
+end
+
+local Connection = {}
+function Connection:Disconnect()
+	local _, connections = unpack(self)
+
+	local connectionIndex = tableFind(connections, self)
+	if connectionIndex then
+		tableRemove(connections, connectionIndex)
+	end
+end
+
+function SignalMethods:Connect(func: () -> (), ...)
+	if ... then
+		local subFunction = func
+		local parameters = {...}
+		func = function() subFunction(unpack(parameters)) end 
+	end
+
+	local connections = self._connections
+	local SignalConnection = setmetatable({ func, connections }, { __index = Connection })
+	connections[#connections + 1] = SignalConnection
+	return SignalConnection
+end
+
+function SignalMethods:DisconnectAll()
+	local connections = self._connections
+	for connectionIndex in next, connections do
+		connections[connectionIndex] = nil
+	end
+end
+
+function SignalMethods:Wait(timeout: number?)
+	local thread = coroutineRunning()
+
+	local connection
+
+	local timeoutThread
+	if timeout then
+		timeoutThread = taskDelay(timeout, function() 
+			connection:Disconnect(); 
+			connection = nil; 
+
+			timeoutThread = nil;
+
+			taskSpawn(thread)
+		end)
+	end
+
+	connection = self:Connect(function(...)
+		connection:Disconnect()
+		taskSpawn(thread, ...)
+		if timeoutThread then 
+			taskCancel(timeoutThread);
+			timeoutThread = nil 
+		end
+	end)
+
+	return coroutineYield()
+end
+
+function SignalMethods:Once(func: () -> (), ...)
+	if ... then
+		local subFunction = func
+		local parameters = {...}
+		func = function() subFunction(unpack(parameters)) end 
+	end
+
+	local connection
+	connection = self:Connect(function(...)
+		connection:Disconnect()
+		connection = nil
+
+		taskSpawn(func, ...)
+	end)
+
+	return connection
+end
+
+function SignalMethods:Destroy()
+	self:DisconnectAll()
+
+	local connections = self._connections
+	for i in next, connections do
+		connections[i] = nil
+	end
+
+	for i in next, self do
+		self[i] = nil
+	end
+
+	setmetatable(self, nil)
+	return true
+end
+
+export type SignalConnection = typeof(Connection)
+export type Signal = typeof(SignalConstructor.new())
+
+return SignalConstructor]]></ProtectedString>
+                </Properties>
+            </Item>
+        </Item>
+    </Item>
+</roblox>
