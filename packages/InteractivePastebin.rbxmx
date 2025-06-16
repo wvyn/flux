@@ -1,0 +1,300 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXR1PSN57BCBDXMPBL3A82XKDJML478QJE">
+        <Properties>
+            <string name="Name">InteractivePastebin</string>
+            <string name="ScriptGuid">{0f72c0fc-bf15-4821-b08d-5d6fe6076f1c}</string>
+            <ProtectedString name="Source"><![CDATA[local httpService = game:GetService("HttpService")
+
+local InteractivePastebinConstructor = {}
+local InteractivePastebinMethods = {}
+
+function InteractivePastebinMethods:GetRawPaste(pasteKey: string)
+	assert(typeof(pasteKey) == "string", `Expected pasteKey as string got {typeof(pasteKey)}`)
+
+	local response: Response = httpService:RequestAsync({
+		Url = `https://pastebin.com/raw/{pasteKey}`,
+		Method = "GET",
+	})
+
+	return (response.Success and response.Body or nil) :: string?, response
+end
+
+function InteractivePastebinMethods:GetUserRawPaste(userRawPasteInfo: UserRawPasteInfo)
+	assert(typeof(userRawPasteInfo) == "table", `Expected userRawPasteInfo as table (UserRawPasteInfo) got {typeof(userRawPasteInfo)}`)
+	assert(userRawPasteInfo.UserKey, "No UserKey provided")
+	assert(userRawPasteInfo.PasteKey, "No PasteKey provided")
+
+	local query = ""
+	for queryName, queryValue in next, 
+		{
+			api_dev_key = self.DeveloperAPIKey,
+			api_user_key = userRawPasteInfo.UserKey,
+			api_paste_key = userRawPasteInfo.PasteKey,
+			api_option = "show_paste"
+		} do
+		query ..= `{(query ~= "" and "&" or "")}{queryName}={httpService:UrlEncode(queryValue)}`
+	end
+
+	local response: Response = httpService:RequestAsync({
+		Url = "https://pastebin.com/api/api_raw.php",
+		Method = "POST",
+		Headers = {
+			["Content-Type"] = "application/x-www-form-urlencoded"
+		},
+		Body = query
+	})
+
+	return (response.Success and response.Body or nil) :: string?, response
+end
+
+function InteractivePastebinMethods:GetUserDetails(userDetailsInfo: UserDetailsInfo)
+	assert(typeof(userDetailsInfo) == "table", `Expected userDetailsInfo as table (DserDetailsInfo) got {typeof(userDetailsInfo)}`)
+	assert(userDetailsInfo.UserKey, "No UserKey provided")
+
+	local query = ""
+	for queryName, queryValue in next, 
+		{
+			api_dev_key = self.DeveloperAPIKey,
+			api_user_key = userDetailsInfo.UserKey,
+			api_option = "userdetails"
+		} do
+		query ..= `{(query ~= "" and "&" or "")}{queryName}={httpService:UrlEncode(queryValue)}`
+	end
+
+	local response: Response = httpService:RequestAsync({
+		Url = "https://pastebin.com/api/api_post.php",
+		Method = "POST",
+		Headers = {
+			["Content-Type"] = "application/x-www-form-urlencoded"
+		},
+		Body = query
+	})
+
+	local userDetails: UserDetails = {}
+	if response.Success then
+		for _, userDetailHTML in next, (response.Body :: string):gsub("<user>", ""):gsub("</user>", ""):split("\n") do
+			local userDetailName, userDetailValue = userDetailHTML:match("<user_([%w_]+)>(.-)</user_[%w_]+>")
+			if userDetailName then
+				userDetails[userDetailName:gsub("^%l", string.upper):gsub("_(%l)", string.upper)] = userDetailValue
+			end
+		end
+	end
+
+	return userDetails, response
+end
+
+function InteractivePastebinMethods:DeletePaste(deletePasteInfo: DeletePasteInfo)
+	assert(typeof(deletePasteInfo) == "table", `Expected deletePasteInfo as table (DeletePasteInfo) got {typeof(deletePasteInfo)}`)
+	assert(deletePasteInfo.UserKey, "No UserKey provided")
+	assert(deletePasteInfo.PasteKey, "No PasteKey provided")
+
+	local query = ""
+	for queryName, queryValue in next, 
+		{
+			api_dev_key = self.DeveloperAPIKey,
+			api_user_key = deletePasteInfo.UserKey,
+			api_paste_key = deletePasteInfo.PasteKey,
+			api_option = "delete"
+		} do
+		query ..= `{(query ~= "" and "&" or "")}{queryName}={httpService:UrlEncode(queryValue)}`
+	end
+
+	local response: Response = httpService:RequestAsync({
+		Url = "https://pastebin.com/api/api_post.php",
+		Method = "POST",
+		Headers = {
+			["Content-Type"] = "application/x-www-form-urlencoded"
+		},
+		Body = query
+	})
+
+	return response.Success, response
+end
+
+function InteractivePastebinMethods:ListPastes(listPasteInfo: ListPasteInfo)
+	assert(typeof(listPasteInfo) == "table", `Expected listPasteInfo as table (ListPasteInfo) got {typeof(listPasteInfo)}`)
+	assert(listPasteInfo.UserKey, "No UserKey provided")
+
+	local query = ""
+	for queryName, queryValue in next, 
+		{
+			api_dev_key = self.DeveloperAPIKey,
+			api_user_key = listPasteInfo.UserKey,
+			api_results_limit = listPasteInfo.ResultsLimit,
+			api_option = "list"
+		} do
+		query ..= `{(query ~= "" and "&" or "")}{queryName}={httpService:UrlEncode(queryValue)}`
+	end
+
+	local response: Response = httpService:RequestAsync({
+		Url = "https://pastebin.com/api/api_post.php",
+		Method = "POST",
+		Headers = {
+			["Content-Type"] = "application/x-www-form-urlencoded"
+		},
+		Body = query
+	})
+
+	local sortByKey = listPasteInfo.SortByKey
+	local sortByTitle = listPasteInfo.SortByTitle
+
+	local pasteList: PasteList = {}
+	if response.Success then
+		for _, pasteListHTML in next, (response.Body :: string):gsub("\n</paste>", ""):gsub("\n", "", 1):split("<paste>\n") do
+			local pasteListItem: PasteListItem = {}
+			for _, pasteItemHTML in next, pasteListHTML:split("\n") do
+				local pasteItemName, pasteItemValue = pasteItemHTML:match("<paste_([%w_]+)>(.-)</paste_[%w_]+>")
+				if pasteItemName then
+					pasteListItem[pasteItemName:gsub("^%l", string.upper):gsub("_(%l)", string.upper)] = pasteItemValue
+				end
+			end
+
+			pasteList[sortByKey and pasteListItem.Key or sortByTitle and pasteListItem.Title or #pasteList + 1] = pasteListItem
+		end
+	end
+
+	return pasteList, response
+end
+
+function InteractivePastebinMethods:GetUserKey(userInfo: UserInfo)
+	assert(typeof(userInfo) == "table", `Expected userInfo as table (UserInfo) got {typeof(userInfo)}`)
+	assert(userInfo.Username, "No Username provided")
+	assert(userInfo.Password, "No Password provided")
+
+	local query = ""
+	for queryName, queryValue in next, 
+		{
+			api_dev_key = self.DeveloperAPIKey,
+			api_user_name = userInfo.Username,
+			api_user_password = userInfo.Password
+		} do
+		query ..= `{(query ~= "" and "&" or "")}{queryName}={httpService:UrlEncode(queryValue)}`
+	end
+
+	local response: Response = httpService:RequestAsync({
+		Url = "https://pastebin.com/api/api_login.php",
+		Method = "POST",
+		Headers = {
+			["Content-Type"] = "application/x-www-form-urlencoded"
+		},
+		Body = query
+	})
+
+	return (response.Success and response.Body or nil) :: string?, response
+end
+
+function InteractivePastebinMethods:Paste(pasteCode: string, pasteInfo: PasteInfo?)
+	pasteInfo = pasteInfo or {}
+
+	local query = ""
+	for queryName, queryValue in next, 
+		{
+			api_dev_key = self.DeveloperAPIKey,
+			api_paste_code = pasteCode,
+			api_option = "paste",
+
+			api_user_key = pasteInfo.UserKey,
+			api_paste_name = pasteInfo.Name,
+			api_paste_format = pasteInfo.Format,
+			api_paste_private = pasteInfo.Private,
+			api_paste_expire_data = pasteInfo.ExpireDate,
+			api_folder_key = pasteInfo.FolderKey
+		} do
+		query ..= `{(query ~= "" and "&" or "")}{queryName}={httpService:UrlEncode(queryValue)}`
+	end
+
+	local response: Response = httpService:RequestAsync({
+		Url = "https://pastebin.com/api/api_post.php",
+		Method = "POST",
+		Headers = {
+			["Content-Type"] = "application/x-www-form-urlencoded"
+		},
+		Body = query
+	})
+
+	return response
+end
+
+function InteractivePastebinConstructor.new(developerAPIKey: string)
+	assert(typeof(developerAPIKey) == "string", `Expected developerAPIKey as string got {typeof(developerAPIKey)}`)
+
+	local InteractivePastebin = setmetatable({
+		DeveloperAPIKey = developerAPIKey
+	}, { __index = InteractivePastebinMethods })
+	return InteractivePastebin
+end
+
+export type PasteInfo = {
+	UserKey: string?,
+	Name: string?,
+	Format: string?,
+	Private: string?,
+	ExpireDate: string?,
+	FolderKey: string?
+}
+
+export type UserInfo = {
+	Username: string,
+	Password: string
+}
+
+export type ListPasteInfo = {
+	UserKey: string,
+	ResultsLimit: number?,
+
+	SortByKey: boolean?,
+	SortByTitle: boolean?
+}
+
+export type Response = {
+	Body: any,
+	Headers: { any },
+	StatusCode: number,
+	StatusMessage: string,
+	Success: boolean
+}
+
+export type PasteListItem = {
+	Key: string,
+	ExpireDate: string,
+	FormatLong: string,
+	FormatShort: string,
+	Title: string,
+	Size: string,
+	Private: string,
+	URL: string,
+	Hits: string
+}
+
+export type PasteList = { PasteListItem }
+
+export type DeletePasteInfo = {
+	UserKey: string,
+	PasteKey: string
+}
+
+export type UserDetailsInfo = {
+	UserKey: string,
+}
+
+export type UserDetails = {
+	AccountType: string,
+	AvatarUrl: string,
+	Expiration: string,
+	FormatShort: string,
+	Location: string,
+	Name: string,
+	Private: string,
+	Website: string,
+}
+
+export type UserRawPasteInfo = {
+	UserKey: string,
+	PasteKey: string
+}
+
+return InteractivePastebinConstructor]]></ProtectedString>
+        </Properties>
+    </Item>
+</roblox>
