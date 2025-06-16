@@ -1,0 +1,770 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXZ6D85SE5BHPQJ3U17JDV54DUUJOT0QH4">
+        <Properties>
+            <string name="Name">InteractiveKinematics</string>
+            <string name="ScriptGuid">{ea00ec21-697a-4396-ad5c-6ee4172dd13e}</string>
+            <ProtectedString name="Source"><![CDATA[--[=[
+Wyverion 2025 (c)
+
+------------------------------
+Interactive Kinematics [v1.2.4]
+------------------------------
+ _ _ _                     
+| | | |_ _ _ _ ___ ___ ___ 
+| | | | | | | | -_|  _|   |
+|_____|_  |\_/|___|_| |_|_|
+      |___|                
+----------------------------
+[CODE EXAMPLES]
+-----------------------------------------------------------------------
+1.	**[3D & 2D Inverse Kinematics Visualizer With Constraints]**
+-----------------------------------------------------------------------
+local RunService = game:GetService("RunService")
+
+local InteractiveKinematics = require("./InteractiveKinematics")
+
+-- Reference to start and end targets
+local startAttachment = workspace:WaitForChild("Start")
+local endAttachment = workspace:WaitForChild("End")
+
+-- Create the FABRIK solver instance
+local Solver = InteractiveKinematics.new({
+	Dimension = "3D", -- Set to 2D for 3D Plane
+	StartPosition = startAttachment.Position,
+	Lengths = { 5, 2, 4 },
+	Constraints = {
+		NumberRange.new(40, 140),
+	}
+})
+
+-- Create parts to represent each bone
+local boneParts = {}
+do
+	local initialCFrames = Solver:GetCFrames()
+	for index, cframe in next, initialCFrames do
+		local length = Solver.Lengths[index]
+
+		local bone = Instance.new("Part")
+		bone.Name = "Bone_" .. index
+		bone.Anchored = true
+		bone.CanCollide = false
+		bone.Material = Enum.Material.Neon
+		bone.Size = Vector3.new(0.3, 0.3, length)
+		bone.CFrame = cframe * CFrame.new(0, 0, -length / 2)
+		bone.Parent = workspace
+
+		boneParts[index] = bone
+	end
+end
+
+-- Animate and update the bone colors and positions in real-time
+RunService.Heartbeat:Connect(function(deltaTime)
+	local currentTime = tick()
+
+	-- Solve FABRIK with the latest target positions
+	Solver:FABRIK({
+		StartPosition = startAttachment.Position,
+		TargetPosition = endAttachment.Position,
+		Tolerance = 0.01
+	})
+
+	-- Update bone positions and apply animated rainbow color
+	local updatedCFrames = Solver:GetCFrames(startAttachment.Position, endAttachment.Position)
+	for index, cframe in next, updatedCFrames do
+		local length = Solver.Lengths[index]
+		local bone = boneParts[index]
+
+		if bone then
+			bone.CFrame = cframe
+
+			-- Animate HSV hue to flow from base to tip over time
+			local hueOffset = (index / (#updatedCFrames * 30) + currentTime * 0.05) % 1
+			bone.Color = Color3.fromHSV(hueOffset, 1, 1)
+		end
+	end
+end)
+-------------------------------------------------
+2.	**[GUI Inverse Kinematics Visualizer With Constraints]**
+-------------------------------------------------
+--[[
+    Server-Side Kinematics Visualization Using Interactive Kinematics and RealmUI
+
+    Overview:
+    This script visualizes the inverse kinematics (IK) solver's calculations for a 2D chain of segments in the `ScreenGui`.
+    The server calculates the positions and continuously updates the segments (represented by `Frames`) in a GUI, based on the mouse position, without any player-side involvement.
+
+    Modules Used:
+    - InteractiveKinematics: Handles the inverse kinematics calculations.
+    - RealmUI: Provides an interface to easily create GUI elements, such as `Frame`, and update them in real-time.
+    - CanvasWrap: A utility function within `RealmUI` to position and manipulate GUI elements within the screen.
+
+    Script Breakdown:
+    1. Initial Setup: Import necessary modules for inverse kinematics and GUI management.
+    2. Solver Initialization: Create an instance of `InteractiveKinematics` with initial parameters like position and segment lengths.
+    3. GUI Creation: Create `Frame` elements to represent each segment and point of the IK chain.
+    4. Animation and Updating: Use `RunService.Heartbeat` to continuously update the positions of the joints and segments in the GUI based on the solver's calculations.
+]]
+
+local InteractiveKinematics = require("./InteractiveKinematics")
+local RealmUI = require("./RealmUI")
+local CanvasWrap = RealmUI.QuickAccess.CanvasWrap
+
+-- Initialize the Interactive Kinematics Solver
+local Solver = InteractiveKinematics.new({
+	Dimension = "2D",
+	StartPosition = Vector2.new(500, 400),
+	Constraints = { NumberRange.new(-90, 90) },
+	Lengths = { 200, 150, 75 }              -- Lengths of the segments in the IK chain
+})
+
+-- Create a ScreenGui element in StarterGui to display the visualization
+local gui = RealmUI.Element.new("ScreenGui", { Parent = game:GetService("StarterGui") })
+
+-- Create the segments and points UI elements (Frames)
+local segments = {}
+local points = {}
+for i = 1, #Solver.Lengths do
+	-- Create a Frame to represent the segment
+	segments[i] = CanvasWrap(RealmUI.Element.new("Frame", {
+		Size = UDim2.fromOffset(Solver.Lengths[i], 10),  -- Set segment width based on its length
+		AnchorPoint = Vector2.one/2,  -- Center the segment's anchor
+		Parent = gui  -- Parent the segment to the ScreenGui
+	}))
+
+	-- Create a Frame to represent the joint point
+	points[i] = CanvasWrap(RealmUI.Element.new("Frame", {
+		Size = UDim2.fromOffset(20, 20),  -- Set point size to 20x20 pixels
+		AnchorPoint = Vector2.one/2,  -- Center the point's anchor
+		Parent = gui  -- Parent the point to the ScreenGui
+	}))
+end
+
+-- Animation loop: Updates the IK solver and the GUI based on the mouse position
+game:GetService("RunService").Heartbeat:Connect(function()
+	-- Get the current mouse position in world space
+	Solver:FABRIK({
+		TargetPosition = game:GetService("UserInputService"):GetMouseLocation()
+	})
+
+	-- Get the joint positions from the solver
+	local positions = Solver:GetPositions()
+
+	-- Update each segment and point in the GUI based on the new joint positions
+	for jointIndex = 1, #positions - 1 do
+		local segment = segments[jointIndex]
+
+		-- Change the color of the segment over time to create a dynamic effect
+		segment.BackgroundColor3 = Color3.fromHSV((tick() / 3) % 1, 1, 1)
+
+		-- Draw a line connecting the current joint and the next joint
+		segment:DrawLine(positions[jointIndex], positions[jointIndex + 1])
+
+		-- Update the position of the joint point in the GUI
+		points[jointIndex].Position = segment:Vector2ToUDim2(positions[jointIndex])
+	end
+end)
+]=]
+
+local types = require("./InteractiveKinematics/types.d")
+
+local InteractiveKinematics = {}
+local InteractiveKinematicsMethods = {}
+
+local vector2Zero = Vector2.zero
+local vector3Zero = Vector3.zero
+
+local mathClamp = math.clamp
+local mathAcos = math.acos
+local mathAtan2 = math.atan2
+local mathDeg = math.deg
+local mathRad = math.rad
+local mathCos = math.cos
+local mathSin = math.sin
+local mathSign = math.sign
+
+local vector2New = Vector2.new
+local vector3New = Vector3.new
+
+local vector3XAxis = Vector3.xAxis
+
+local cframeNew = CFrame.new
+local cframeZero = cframeNew()
+local cframeLookAt = CFrame.lookAt
+local cframeFromEulerAnglesXYZ = CFrame.fromEulerAnglesXYZ
+local cframeFromAxisAngle = CFrame.fromAxisAngle
+
+local pi = math.pi
+
+local tableClear = table.clear
+
+function InteractiveKinematicsMethods:Project3DTo2DPlane(position: Vector3): Vector2
+	return vector2New((position * vector3New(1, 0, 1)).Magnitude, position.Y)
+end
+
+function InteractiveKinematicsMethods:ResetPositions(startPosition: types.Vector?)
+	tableClear(self.Positions)
+
+	local is3DPlane = self.Dimension == "2D" and typeof(startPosition) == "Vector3"
+	self.IsPlane3D = is3DPlane
+	self._startPosition = startPosition or self.Dimension == "2D" and vector2Zero or vector3Zero
+
+	local positions = self.Positions
+	positions[1] = is3DPlane and vector2Zero or self._startPosition
+
+	local is2D = typeof(positions[1]) == "Vector2"
+	local accumulatedLength = 0
+
+	for _, segmentLength in next, self.Lengths do
+		accumulatedLength += segmentLength
+		positions[#positions + 1] = positions[1] + (is2D and Vector2 or Vector3).new(accumulatedLength)
+	end
+
+	return positions
+end
+
+local function getAngleBetweenVectors(vecA: Vector3, vecB: Vector3): number
+	local dotProduct = mathClamp(vecA:Dot(vecB), -1, 1)
+	return mathAcos(dotProduct)
+end
+
+local function apply3DConstraintToBone(prevJoint: Vector3, joint: Vector3, nextJoint: Vector3, maxAngleDeg: number): Vector3
+	local directionA = (prevJoint - joint).Unit
+	local directionB = (nextJoint - joint).Unit
+	local currentAngle = getAngleBetweenVectors(directionA, directionB)
+	local maxAngleRad = mathRad(maxAngleDeg)
+
+	if currentAngle <= maxAngleRad then
+		return nextJoint
+	end
+
+	local rotationAxis = directionA:Cross(directionB)
+	if rotationAxis.Magnitude == 0 then
+		return nextJoint
+	end
+
+	local rotation = cframeFromAxisAngle(rotationAxis.Unit, maxAngleRad)
+	local constrainedDirection = (rotation * directionA).Unit
+	local length = (nextJoint - joint).Magnitude
+	return joint + constrainedDirection * length
+end
+
+local function clamp2DAngleBetween(vecA: Vector2, vecB: Vector2, minDeg: number, maxDeg: number): Vector2
+	local angleA = mathAtan2(vecA.Y, vecA.X)
+	local angleB = mathAtan2(vecB.Y, vecB.X)
+	local delta = mathDeg(angleB - angleA)
+	delta = (delta + 180) % 360 - 180
+
+	if delta >= minDeg and delta <= maxDeg then
+		return vecB
+	end
+
+	local clampedDelta = mathClamp(delta, minDeg, maxDeg)
+	local finalAngle = angleA + mathRad(clampedDelta)
+	return vector2New(mathCos(finalAngle), mathSin(finalAngle))
+end
+
+local function clamp3DAngleBetween(vecA: Vector3, vecB: Vector3, minDeg: number, maxDeg: number): Vector3
+	local angle = getAngleBetweenVectors(vecA, vecB)
+	local angleDeg = mathDeg(angle)
+
+	if angleDeg >= minDeg and angleDeg <= maxDeg then
+		return vecB
+	end
+
+	local targetAngleDeg = mathClamp(angleDeg, minDeg, maxDeg)
+	local targetAngleRad = mathRad(targetAngleDeg)
+	local axis = vecA:Cross(vecB)
+	if axis.Magnitude == 0 then
+		return vecB
+	end
+
+	local rotation = cframeFromAxisAngle(axis.Unit, targetAngleRad)
+	local constrainedDirection = (rotation * vecA).Unit
+	return constrainedDirection
+end
+
+function InteractiveKinematicsMethods:FABRIK(options: types.FABRIKOptions)
+	local positions = self.Positions
+	local rootPosition = self.IsPlane3D and vector2Zero or options.StartPosition or positions[1]
+	if options.StartPosition then
+		self.IsPlane3D = self.Dimension == "2D" and typeof(options.StartPosition) == "Vector3"
+		self._startPosition = options.StartPosition
+	end
+
+	local is2D = self.Dimension == "2D"
+	local targetPosition = self.IsPlane3D and self:Project3DTo2DPlane(options.TargetPosition - options.StartPosition) or options.TargetPosition
+	local tolerance = options.Tolerance or 1e-3
+	local segmentLengths = self.Lengths
+	local constraints = self.Constraints or {}
+	local jointCount = #positions
+
+	local chainLength = 0
+	for _, len in next, segmentLengths do chainLength += len end
+
+	if (targetPosition - rootPosition).Magnitude > chainLength then
+		positions[1] = rootPosition
+		for i = 2, jointCount do
+			local directionToTarget = (targetPosition - positions[i - 1]).Unit
+			local idealPosition = positions[i - 1] + directionToTarget * segmentLengths[i - 1]
+
+			if i >= 3 and constraints[i - 2] then
+				local angleLimit = constraints[i - 2]
+				local minAngle, maxAngle = angleLimit.Min, angleLimit.Max
+				local prevBone = (positions[i - 1] - positions[i - 2]).Unit
+				local currBone = (idealPosition - positions[i - 1]).Unit
+
+				local constrainedDirection = is2D
+					and clamp2DAngleBetween(prevBone, currBone, minAngle, maxAngle)
+					or clamp3DAngleBetween(prevBone, currBone, minAngle, maxAngle)
+
+				positions[i] = positions[i - 1] + constrainedDirection * segmentLengths[i - 1]
+			else
+				positions[i] = idealPosition
+			end
+		end
+
+		return false
+	end
+
+	local maxIterations = options.Iterations or 16
+	for _ = 1, maxIterations do
+		positions[jointCount] = targetPosition
+		for i = jointCount - 1, 1, -1 do
+			local direction = (positions[i] - positions[i + 1]).Unit
+			positions[i] = positions[i + 1] + direction * segmentLengths[i]
+		end
+
+		positions[1] = rootPosition
+		for i = 2, jointCount do
+			local direction = (positions[i] - positions[i - 1]).Unit
+			local segmentLength = segmentLengths[i - 1]
+			local adjustedPosition = positions[i - 1] + direction * segmentLength
+
+			if i >= 3 and constraints[i - 2] then
+				local angleLimit = constraints[i - 2]
+				local prevBone = (positions[i - 1] - positions[i - 2]).Unit
+				local currBone = (adjustedPosition - positions[i - 1]).Unit
+
+				local constrainedDirection = is2D
+					and clamp2DAngleBetween(prevBone, currBone, angleLimit.Min, angleLimit.Max)
+					or clamp3DAngleBetween(prevBone, currBone, angleLimit.Min, angleLimit.Max)
+
+				adjustedPosition = positions[i - 1] + constrainedDirection * segmentLength
+			end
+
+			positions[i] = adjustedPosition
+		end
+
+		if (positions[#positions] - targetPosition).Magnitude <= tolerance then
+			return true
+		end
+	end
+
+	return false
+end
+
+function InteractiveKinematicsMethods:GetCFrames(startPosition: Vector3?, endPosition: Vector3?)
+	local positions = self.Positions
+	local is2D = typeof(positions[1]) == "Vector2"
+	local cframeList = {}
+
+	local zSign = self.IsPlane3D and startPosition and mathSign(endPosition.Z - startPosition.Z)
+	if zSign == 0 then zSign = 1 end
+
+	local lengths = self.Lengths
+	for i = 1, #positions - 1 do
+		local posA = positions[i]
+		local posB = positions[i + 1]
+		local direction = posB - posA
+
+		if is2D then
+			posA = vector3New(posA.X, posA.Y, 0)
+			direction = vector3New(direction.X, direction.Y, 0)
+		end
+
+		local baseRotation = cframeLookAt(posA, posA + direction)
+		local axisAlignment = zSign and cframeNew(startPosition) * cframeFromEulerAnglesXYZ(0, -zSign * mathAcos(vector3XAxis:Dot(((endPosition - startPosition) * vector3New(1, 0, 1)).Unit)), 0) or cframeZero
+		cframeList[i] = axisAlignment * baseRotation * cframeNew(0, 0, -lengths[i]/2)
+	end
+
+	return cframeList
+end
+
+function InteractiveKinematicsMethods:GetTotalLength()
+	local total = 0
+	for _, length in next, self.Lengths do
+		total += length
+	end; return total
+end
+
+function InteractiveKinematicsMethods:GetChainMidpoint()
+	local sum = self.Dimension == "2D" and vector2Zero or vector3Zero
+	local count = #self.Positions
+	for _, position in next, self.Positions do
+		sum += position
+	end
+	return sum / count
+end
+
+function InteractiveKinematicsMethods:GetChainDirection()
+	local startPos = self.Positions[1]
+	local endPos = self.Positions[#self.Positions]
+	local direction = endPos - startPos
+	return direction.Magnitude > 0 and direction.Unit or direction
+end
+
+function InteractiveKinematicsMethods:GetSegmentDirections()
+	local positions = self.Positions
+	local directions = {}
+	for i = 1, #positions - 1 do
+		local delta = positions[i + 1] - positions[i]
+		directions[i] = delta.Magnitude > 0 and delta.Unit or delta
+	end
+	return directions
+end
+
+function InteractiveKinematicsMethods:GetJointAngles2D()
+	assert(self.Dimension == "2D", "GetJointAngles2D can only be used in 2D mode.")
+
+	local positions = self.Positions
+	local angles = {}
+	for i = 2, #positions - 1 do
+		local a = positions[i - 1]
+		local b = positions[i]
+		local c = positions[i + 1]
+		local ab = b - a
+		local bc = c - b
+		local angle = mathAtan2(bc.Y, bc.X) - mathAtan2(ab.Y, ab.X)
+		angles[#angles + 1] = (angle + pi) % (2 * pi) - pi
+	end
+
+	return angles
+end
+
+function InteractiveKinematicsMethods:GetJointAngles3D(): { number }
+	assert(self.Dimension == "3D", "GetJointAngles3D can only be used in 3D mode.")
+
+	local angles = {}
+	local positions = self.Positions
+
+	for i = 2, #positions - 1 do
+		local a = positions[i - 1]
+		local b = positions[i]
+		local c = positions[i + 1]
+
+		local vecAB = (b - a).Unit
+		local vecBC = (c - b).Unit
+
+		local angle = getAngleBetweenVectors(vecAB, vecBC)
+		angles[#angles + 1] = angle
+	end
+
+	return angles
+end
+
+
+function InteractiveKinematicsMethods:IsChainWithinConstraints()
+	local positions = self.Positions
+	local is2D = self.Dimension == "2D"
+	for i = 3, #positions do
+		local prev = positions[i - 2]
+		local curr = positions[i - 1]
+		local next = positions[i]
+		local prevVec = curr - prev
+		local nextVec = next - curr
+		local constraint = self.Constraints[i - 2]
+		if constraint then
+			local angle
+			if is2D then
+				local a1 = mathAtan2(prevVec.Y, prevVec.X)
+				local a2 = mathAtan2(nextVec.Y, nextVec.X)
+				angle = mathDeg(a2 - a1)
+				angle = (angle + 180) % 360 - 180
+			else
+				angle = mathDeg(getAngleBetweenVectors(prevVec.Unit, nextVec.Unit))
+			end
+			if angle < constraint.Min or angle > constraint.Max then
+				return false
+			end
+		end
+	end
+	return true
+end
+
+function InteractiveKinematicsMethods:GetDistanceToTarget(targetPosition: types.Vector)
+	local endEffector = self.Positions[#self.Positions]
+	if self.IsPlane3D then endEffector += self._startPosition end
+	return (targetPosition - endEffector).Magnitude
+end
+
+function InteractiveKinematicsMethods:GetChainError(targetPosition): number
+	local distance = self:GetDistanceToTarget(targetPosition)
+	return distance / self:GetTotalLength()
+end
+
+
+function InteractiveKinematicsMethods:GetPositions()
+	local positions = self.Positions
+	local newPositions = {}
+	local isPlane3D = self.IsPlane3D
+	local startPosition = self._startPosition
+	for i, position in next, positions do
+		newPositions[i] = isPlane3D and position + startPosition or position
+	end; return newPositions
+end
+
+function InteractiveKinematicsMethods:HasSelfIntersection(tolerance: number?)
+	tolerance = tolerance or 1e-3
+	for i = 1, #self.Positions - 2 	do
+		for j = i + 2, #self.Positions - 1 do
+			local a1 = self.Positions[i]
+			local a2 = self.Positions[i + 1]
+			local b1 = self.Positions[j]
+			local b2 = self.Positions[j + 1]
+
+			local da = a2 - a1
+			local db = b2 - b1
+			if (a1 - b1).Magnitude < tolerance or (a2 - b2).Magnitude < tolerance then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+InteractiveKinematics.new = function(options: types.SolverOptions)
+	assert(options.Lengths, "<options.Lengths> expected an array of numbers.")
+	assert(options.Dimension, "<options.Dimensions> expected string \"3D\" or \"2D\"")
+
+	local Solver = setmetatable({
+		Dimension = options.Dimension,
+		Lengths = options.Lengths,
+		IsPlane3D = false,
+		Positions = {},
+		Constraints = options.Constraints or {},
+		_startPosition = options.StartPosition or options.Dimension == "2D" and vector2Zero or vector3Zero,
+	}, { __index = InteractiveKinematicsMethods })
+
+	Solver:ResetPositions(options.StartPosition)
+
+	return Solver
+end :: types.SolverConstructor
+
+return InteractiveKinematics
+]]></ProtectedString>
+        </Properties>
+        <Item class="ModuleScript" referent="RBX8SHSZTZGSIJV3IXFBPLCKB206P75URMY">
+            <Properties>
+                <string name="Name">types.d</string>
+                <string name="ScriptGuid">{ab95b16f-e15b-47f0-8da5-915339649a28}</string>
+                <ProtectedString name="Source"><![CDATA[local types = {}
+
+-- A type alias representing either a 2D or 3D vector
+export type Vector = Vector3 | Vector2
+
+-- A string literal type representing the working dimension of the solver
+export type Dimension = "3D" | "2D"
+
+-- Configuration for creating a new solver instance
+export type SolverOptions = {
+	-- Whether the solver operates in "2D" or "3D" space
+	Dimension: Dimension,
+
+	-- The initial root position of the solver chain (optional)
+	StartPosition: Vector?,
+
+	-- An ordered list of segment lengths
+	Lengths: { number },
+
+	-- (Optional) Angular constraints for each joint as NumberRanges (in degrees)
+	Constraints: { NumberRange }?
+}
+
+-- Parameters used to run the FABRIK solving algorithm
+export type FABRIKOptions = {
+	-- Optional override for the base/root position before solving
+	StartPosition: Vector?,
+
+	-- The desired target position for the end effector
+	TargetPosition: Vector,
+
+	-- Optional convergence threshold (default is 1e-3)
+	Tolerance: number?,
+
+	-- Optional maximum iteration count (default is 16)
+	Iterations: number?
+}
+
+-- The main solver interface
+export type Solver = {
+	--[[
+		Operating dimension ("2D" or "3D")
+		This defines whether the kinematic chain operates in 2D or 3D space.
+	]]
+	Dimension: Dimension,
+
+	--[[
+		List of segment lengths
+		An array of numbers representing the lengths of each segment in the kinematic chain.
+	]]
+	Lengths: { number },
+
+	--[[
+		Whether a 3D vector has been projected to 2D
+		A boolean indicating whether the chain has been projected to a 2D plane for 2D inverse kinematics.
+	]]
+	IsPlane3D: boolean,
+
+	--[[
+		List of joint positions (2D or 3D vectors)
+		The positions of each joint in the chain, either as 2D or 3D vectors.
+	]]
+	Positions: { Vector },
+
+	--[[
+		Joint rotation constraints (as NumberRanges, in degrees)
+		A table of constraints applied to each joint, defining the allowed rotation range for each joint.
+	]]
+	Constraints: { NumberRange },
+
+	--[[
+		Resets the internal joint positions to the start position or origin
+		This function resets the joint positions, optionally starting from a given position.
+		@param startPosition (optional): The starting position for the joints.
+		@return A table of the newly set joint positions.
+	]]
+	ResetPositions: typeof(function(self: Solver, startPosition: Vector): { Vector } end),
+
+	--[[
+		Executes the FABRIK inverse kinematics algorithm to update joint positions
+		The FABRIK (Forward And Backward Reaching Inverse Kinematics) algorithm is used to adjust the joint positions to reach a target.
+		@param options: {
+			StartPosition: Vector?,
+			TargetPosition: Vector,
+			Tolerance: number?,
+			Iterations: number?
+		}
+		
+		@return A boolean indicating whether the target was successfully reached within the tolerance.
+	]]
+	FABRIK: typeof(function(self: Solver, options: FABRIKOptions): boolean end),
+
+	--[[
+		Returns a list of CFrames representing each joint’s orientation
+		This function calculates and returns the CFrame (coordinate frame) for each joint based on its position and orientation.
+		@param startPosition (optional): The starting position used for initial alignment.
+		@param endPosition (optional): The target end position used for calculating final joint orientations.
+		@return A table of CFrames for each joint in the chain.
+	]]
+	GetCFrames: typeof(function(self: Solver, startPosition: Vector3?, endPosition: Vector3): { CFrame } end),
+
+	--[[
+		Projects a 3D position onto a 2D plane used for 2D IK solving
+		This function projects a 3D position onto a 2D plane, used primarily for 2D inverse kinematics.
+		@param position: The 3D position to project onto the 2D plane.
+		@return A 2D vector representing the projected position.
+	]]
+	Project3DTo2DPlane: typeof(function(self: Solver, position: Vector3): Vector2 end),
+
+	--[[
+		Get the total length of the chain
+		This function calculates the total length of the kinematic chain by summing the lengths of all segments.
+		@return The total length of the kinematic chain.
+	]]
+	GetTotalLength: typeof(function(self: Solver): number end),
+
+	--[[
+		Get the midpoint of the chain
+		This function calculates and returns the midpoint of the kinematic chain by averaging all joint positions.
+		@return The midpoint of the kinematic chain as a vector.
+	]]
+	GetChainMidpoint: typeof(function(self: Solver): Vector end),
+	
+		--[[
+		Get the direction of the chain
+		This function calculates and returns the direction vector from the first joint to the last joint in the kinematic chain.
+		@return The unit vector representing the direction of the chain.
+	]]
+	GetChainDirection: typeof(function(self: Solver): Vector end),
+
+	--[[
+		Get the direction vectors of each segment in the chain
+		This function calculates and returns the direction vectors for each segment in the chain.
+		@return A table of direction vectors for each segment.
+	]]
+	GetSegmentDirections: typeof(function(self: Solver): { Vector } end),
+
+	--[[
+		Get the joint angles in 2D
+		This function calculates the angles between consecutive segments in the chain (only for 2D).
+		@return A table of angles between joints in 2D space.
+	]]
+	GetJointAngles2D: typeof(function(self: Solver): { number } end),
+
+	--[[
+		Get the joint angles in 3D
+		This function calculates the angles between consecutive segments in the chain (only for 3D).
+		@return A table of angles between joints in 3D space.
+	]]
+	GetJointAngles3D: typeof(function(self: Solver): { number } end),
+
+	--[[
+		Check if the chain is within the defined joint constraints
+		This function checks whether all the joint angles are within the specified rotation constraints.
+		@return A boolean indicating whether the chain satisfies all constraints.
+	]]
+	IsChainWithinConstraints: typeof(function(self: Solver): boolean end),
+
+	--[[
+		Get the distance from the chain’s end effector to a target position
+		This function calculates the distance between the end effector (last joint) and the target position.
+		@param targetPosition: The target position to check the distance to.
+		@return The distance between the end effector and the target position.
+	]]
+	GetDistanceToTarget: typeof(function(self: Solver, targetPosition: Vector): number end),
+
+	--[[
+		Get the chain error as a ratio of the total length
+		This function calculates the error between the end effector and a target as a ratio of the total chain length.
+		@param targetPosition: The target position to compare against.
+		@return The error as a ratio of the total length of the kinematic chain.
+	]]
+	GetChainError: typeof(function(self: Solver, targetPosition: Vector): number end),
+
+	--[[
+		Get the current positions of all joints in the chain
+		This function returns the current positions of all joints, adjusted if necessary for 3D projection.
+		@return A table of joint positions.
+	]]
+	GetPositions: typeof(function(self: Solver): { Vector } end),
+
+	--[[
+		Check if the chain has a self-intersection
+		This function checks if any segments in the chain intersect with each other.
+		@param tolerance: Optional tolerance for intersection detection.
+		@return A boolean indicating whether the chain has any self-intersections.
+	]]
+	HasSelfIntersection: typeof(function(self: Solver, tolerance: number?): boolean end)
+}
+
+
+--[[
+A function signature for constructing a new solver instance
+Takes SolverOptions and returns a Solver object
+
+SolverOptions {
+	Dimension: Dimension,
+	StartPosition: Vector?,
+	Lengths: { number },
+	Constraints: { NumberRange }?
+}
+]]
+export type SolverConstructor = typeof(function(options: SolverOptions): Solver end)
+
+return types
+]]></ProtectedString>
+            </Properties>
+        </Item>
+    </Item>
+</roblox>
