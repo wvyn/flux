@@ -1,0 +1,471 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXCHR1QG77TZQ9CMUVNTCQ63BPK97KJIIJ">
+        <Properties>
+            <string name="Name">InteractiveDataService</string>
+            <string name="ScriptGuid">{35904e50-df95-40dd-bd62-785de037dd8b}</string>
+            <ProtectedString name="Source"><![CDATA[local InteractiveDataStore = require(script:WaitForChild("InteractiveDataStore"))
+
+export type BaseProtectedDataInfo = InteractiveDataStore.BaseProtectedDataInfo
+export type LatestDataInfo = InteractiveDataStore.LatestDataInfo
+
+export type SaveInfo = InteractiveDataStore.SaveInfo
+export type LoadInfo = InteractiveDataStore.LoadInfo
+export type ReadInfo = InteractiveDataStore.ReadInfo
+
+export type ControllerSettings = InteractiveDataStore.ControllerSettings
+export type _InteractiveDataStore = InteractiveDataStore._InteractiveDataStore
+
+local InteractiveDataService = {}
+InteractiveDataService._interactiveDataStore = InteractiveDataStore
+
+function InteractiveDataService:GetDataStore(name: string, scope: string?, options: Instance?)
+	return InteractiveDataStore.new(name, scope, options)
+end
+
+return InteractiveDataService
+]]></ProtectedString>
+        </Properties>
+        <Item class="ModuleScript" referent="RBXZO92R567JX1HAPKIPUH7Z3DEL9F6BJYR">
+            <Properties>
+                <string name="Name">InteractiveDataStore</string>
+                <string name="ScriptGuid">{8e7be4f6-83f1-41a9-a26b-4edd3064dd23}</string>
+                <ProtectedString name="Source"><![CDATA[local __VERSION = "v0.1"
+
+local dataStoreService = game:GetService("DataStoreService")
+
+local ObjectWrapper = require(script.Parent:WaitForChild("ObjectWrapper"))
+local Signal = require(script.Parent:WaitForChild("Signal"))
+
+local _getDataStore = dataStoreService.GetDataStore
+local _dateTimeNow = DateTime.now
+
+local InteractiveDataStore = {}
+local InteractiveDataController = {}
+InteractiveDataStore._interactiveDataController = InteractiveDataController
+
+function InteractiveDataStore.new(name: string, scope: string?, options: Instance?)
+	local self = setmetatable({}, { __index = InteractiveDataStore })
+	self.DataStore = _getDataStore(dataStoreService, name, scope, options)
+	return self
+end
+
+export type _InteractiveDataStore = typeof(InteractiveDataStore.new())
+
+export type ControllerSettings = {
+	SessionLocking: boolean?,
+	SessionLockTimeout: number?,
+	PassSessionLocking: boolean?,
+	
+	ReleaseFireSaveEvents: boolean?
+}?
+
+export type LatestDataInfo = {
+	Data: any,
+	Metadata: {
+		SessionLock: {
+			LastUpdate: number,
+			ServerId: string
+		}
+	},
+	__IDS: string
+}
+
+export type BaseProtectedDataInfo = {
+	ProtectedCall: boolean,
+	
+	KeyInfo: DataStoreKeyInfo,
+	LatestData: LatestDataInfo,
+	
+	Success: boolean
+}
+
+export type ReadInfo = BaseProtectedDataInfo & LatestDataInfo
+
+export type SaveInfo = BaseProtectedDataInfo & LatestDataInfo & {
+	AttemptedData: any,
+
+	SaveMessage: string,
+	SavingAuthorized: boolean,
+}
+
+export type LoadInfo = BaseProtectedDataInfo & LatestDataInfo & {
+	LoadMessage: string,
+	LoadingAuthorized: boolean,
+}
+
+
+function InteractiveDataStore:GetWrappedDataStore()
+	return ObjectWrapper.wrap(self.DataStore :: DataStore, self :: _InteractiveDataStore)
+end
+
+function InteractiveDataController.new(
+	key: string, 
+	interactiveDataStore: _InteractiveDataStore, 
+	settings: ControllerSettings
+)
+	settings = settings or {}
+	
+	settings.SessionLocking = settings.SessionLocking or false
+	settings.SessionLockTimeout = settings.SessionLockTimeout or 90000
+	settings.PassSessionLocking = settings.PassSessionLocking or false
+	
+	settings.ReleaseFireSaveEvents = settings.ReleaseFireSaveEvents or false
+	
+	local self = setmetatable({}, { __index = InteractiveDataController })
+	self.InteractiveDataStore = interactiveDataStore
+	self.Settings = settings
+	self.Key = key
+	
+	self.Events = {
+		OnSavedAsync = Signal.new(),
+		OnSaveFailedAsync = Signal.new(),
+		OnSavedExceptionAsync = Signal.new(),
+		
+		OnLoadedAsync = Signal.new(),
+		OnLoadFailedAsync = Signal.new(),
+		OnLoadedExceptionAsync = Signal.new(),
+		
+		OnReadAsync = Signal.new(),
+		OnReadFailedAsync = Signal.new(),
+		OnReadExceptionAsync = Signal.new(),
+		
+		OnReleased = Signal.new(),
+	}
+	
+	return self
+end
+
+function InteractiveDataController:_checkMetadata(metadata)
+	local settings = self.Settings
+	local message = "Unknown"
+	
+	if not settings.PassSessionLocking and metadata.SessionLock and metadata.SessionLock.ServerId ~= game.JobId and (_dateTimeNow(DateTime).UnixTimestampMillis - metadata.SessionLock.LastUpdated) < settings.SessionLockTimeout then
+		message = "Session is Locked." 
+		return false, message
+	end
+	
+	return true, message
+end
+
+function InteractiveDataController:ReadAsync(): ReadInfo
+	local success, latestData: any, keyInfo: DataStoreKeyInfo = pcall(function()
+		return self.InteractiveDataStore.DataStore:UpdateAsync(self.Key, function(oldData)
+			return oldData
+		end)
+	end)
+
+	local readInfo = {
+		ProtectedCall = success,
+		LatestData = latestData,
+		KeyInfo = keyInfo,
+		Success = success
+	}
+
+	self.Events.OnReadExceptionAsync:Fire(readInfo)
+	if success then
+		self.Events.OnReadAsync:Fire(readInfo)
+	else
+		self.Events.OnReadFailedAsync:Fire(readInfo)
+	end
+
+	return readInfo
+end
+
+function InteractiveDataController:LoadAsync(presetData: any?): LoadInfo
+	local loadingAuthorized = false
+	local loadMessage = "Unknown"
+	
+	local success, latestData: any, keyInfo: DataStoreKeyInfo = pcall(function()
+		return self.InteractiveDataStore.DataStore:UpdateAsync(self.Key, function(oldData)
+			if oldData == nil and presetData then
+				oldData = {
+					__IDS = __VERSION,
+					
+					Data = presetData,
+					Metadata = {}
+				}
+			end
+			
+			if oldData and typeof(oldData) == "table" and oldData.Metadata then
+				local metaDataSuccess: boolean, metaDataMessage: string = self:_checkMetadata(oldData.Metadata)
+				if not metaDataSuccess then loadMessage = metaDataMessage; return oldData end
+			end
+			
+			loadingAuthorized = true
+			return oldData
+		end)
+	end)
+	
+	if success and loadingAuthorized then
+		loadMessage = "Loaded Successfully."
+	elseif not success then
+		loadMessage = latestData
+	end
+	
+	local loadInfo = {
+		ProtectedCall = success,
+		
+		LatestData = latestData,
+
+		KeyInfo = keyInfo,
+
+		LoadMessage = loadMessage,
+		LoadingAuthorized = loadingAuthorized,
+		
+		Success = success and loadingAuthorized,
+	}
+
+	self.Events.OnLoadedExceptionAsync:Fire(loadInfo)
+	if success and loadingAuthorized then
+		self.Events.OnLoadedAsync:Fire(loadInfo)
+	else
+		self.Events.OnLoadFailedAsync:Fire(loadInfo)
+	end
+
+	return loadInfo
+end
+
+function InteractiveDataController:SaveAsync(data: any, release: boolean?): SaveInfo
+	local savingAuthorized = false
+	local saveMessage = "Unknown"
+
+	local settings = self.Settings
+
+	local success, latestData: any, keyInfo: DataStoreKeyInfo = pcall(function()
+		return self.InteractiveDataStore.DataStore:UpdateAsync(self.Key, function(oldData)
+			if oldData and typeof(oldData) == "table" and oldData.Metadata then
+				local metaDataSuccess: boolean, metaDataMessage: string = self:_checkMetadata(oldData.Metadata)
+				if not metaDataSuccess then saveMessage = metaDataMessage; return oldData end
+			end
+			
+			savingAuthorized = true
+			return data and {
+				__IDS = __VERSION,
+				
+				Data = data,
+				Metadata = {
+					SessionLock = not release and settings.SessionLocking and {
+						LastUpdated = _dateTimeNow(DateTime).UnixTimestampMillis,
+						ServerId = game.JobId
+					}
+				}
+			} or oldData
+		end)
+	end)
+	
+	if success and savingAuthorized then
+		saveMessage = "Saved Successfully."
+	elseif not success then
+		saveMessage = latestData
+	end
+	
+	local saveInfo = {
+		ProtectedCall = success,
+
+		AttemptedData = data,
+		LatestData = latestData,
+		
+		KeyInfo = keyInfo,
+
+		SaveMessage = saveMessage,
+		SavingAuthorized = savingAuthorized,
+		
+		Success = success and savingAuthorized
+	}
+	
+	if release and self.ReleaseFireSaveEvents or not release then
+		self.Events.OnSavedExceptionAsync:Fire(saveInfo)
+		if success and savingAuthorized then
+			self.Events.OnSavedAsync:Fire(saveInfo)
+		else
+			self.Events.OnSaveFailedAsync:Fire(saveInfo)
+		end
+	end
+	
+	if release then
+		self.Events.OnReleased:Fire(saveInfo)
+	end
+	
+	return saveInfo
+end
+
+function InteractiveDataController:Release(data: any?): SaveInfo
+	return self:SaveAsync(data, true)
+end
+
+function InteractiveDataStore:GetControllerAsync(key: string, settings)
+	return InteractiveDataController.new(key, self :: _InteractiveDataStore, settings)
+end
+
+return InteractiveDataStore]]></ProtectedString>
+            </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="RBX6DUPSMYSLO2XB0YRMJWBJ4S2U6BVMGU1">
+            <Properties>
+                <string name="Name">ObjectWrapper</string>
+                <string name="ScriptGuid">{fb2f6a56-0294-4d54-8425-0cb1ae8634f1}</string>
+                <ProtectedString name="Source"><![CDATA[local ObjectWrapper = {}
+
+function ObjectWrapper.wrap<objectType, wrapperType>(object: objectType, wrapper: wrapperType): (objectType & wrapperType) & (() -> objectType)
+	return setmetatable({}, {
+		__index = function(metaWrapper, index)
+			local wrapperGet = rawget(wrapper, index)
+			if wrapperGet then 
+				local typeOfProperty = typeof(wrapperGet)
+				if typeOfProperty == "function" then
+					return function(...)
+						return wrapperGet(metaWrapper, select(2, ...))
+					end
+				else
+					return wrapperGet
+				end
+			else
+				local property = object[index]
+				local typeOfProperty = typeof(property)
+				if typeOfProperty == "function" then
+					return function(...)
+						return property(object, select(2, ...))
+					end
+				else
+					return property
+				end
+			end
+		end,
+
+		__newindex = function(_, index, value)
+			xpcall(function()
+				object[index] = value
+			end, function()
+				wrapper[index] = value
+			end)
+		end,
+
+		__call = function() return object end
+	})
+end
+
+return ObjectWrapper]]></ProtectedString>
+            </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="RBXX9E4UUWAN8IOAH0TKJMTB2EH6NHMR1GZ">
+            <Properties>
+                <string name="Name">Signal</string>
+                <string name="ScriptGuid">{147aff40-818f-4f00-a4dc-1886902d393d}</string>
+                <ProtectedString name="Source"><![CDATA[local Signal = {}
+Signal.IsSignal = true
+
+function Signal.new()
+	return setmetatable({ Connections = {} }, { __index = Signal })
+end
+
+local taskSpawn = task.spawn
+function Signal:Fire<parameters...>(...: parameters...): parameters...
+	for _, connection in next, self.Connections do
+		taskSpawn(connection, ...)
+	end; return ...
+end
+
+function Signal:Invoke<parameters...>(...: parameters...): parameters...
+	local responses = {}
+	for _, connection in next, self.Connections do
+		responses[#responses + 1] = connection(...) or false
+	end; return responses
+end
+
+
+local tableInsert = table.insert
+local tableRemove = table.remove
+local tableFind = table.find
+
+local Connection = {}
+function Connection:Disconnect()
+	local connections, func = unpack(self)
+
+	local connectionIndex = tableFind(connections, func)
+	if connectionIndex then
+		tableRemove(connections, connectionIndex)
+	end
+end
+
+export type SignalConnection = typeof(Connection)
+export type SignalType = typeof(Signal)
+
+function Signal:Connect(func: () -> ())
+	tableInsert(self.Connections, func)
+	return setmetatable({ self.Connections, func }, { __index = Connection })
+end
+
+function Signal:DisconnectAll()
+	for connectionIndex, _ in next, self.Connections do
+		self.Connections[connectionIndex] = nil
+	end
+end
+
+local coroutineRunning = coroutine.running
+local coroutineYield = coroutine.yield
+
+local taskDelay = task.delay
+local taskCancel = task.cancel
+
+function Signal:Wait(timeout: number?)
+	local thread = coroutineRunning()
+
+	local connection
+	
+	local timeoutThread
+	if timeout then
+		timeoutThread = taskDelay(timeout, function() 
+			connection:Disconnect(); 
+			connection = nil; 
+			
+			timeoutThread = nil;
+			
+			taskSpawn(thread)
+		end)
+	end
+
+	connection = self:Connect(function(...)
+		connection:Disconnect()
+		taskSpawn(thread, ...)
+		if timeoutThread then 
+			taskCancel(timeoutThread);
+			timeoutThread = nil 
+		end
+	end)
+
+	return coroutineYield()
+end
+
+function Signal:Once(func: () -> ())
+	local connection
+	connection = self:Connect(function(...)
+		connection:Disconnect()
+		connection = nil
+
+		taskSpawn(func, ...)
+	end)
+
+	return connection
+end
+
+function Signal:Destroy()
+	self:DisconnectAll()
+
+	for i in next, self.Connections do
+		self.Connections[i] = nil
+	end
+
+	for i in next, self do
+		self[i] = nil
+	end
+
+	setmetatable(self, nil)
+	return nil
+end
+
+return Signal]]></ProtectedString>
+            </Properties>
+        </Item>
+    </Item>
+</roblox>
