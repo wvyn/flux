@@ -1,0 +1,205 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXS7D4UJ2I1HJ80U66XF0PXX4S25865W7C">
+        <Properties>
+            <string name="Name">http</string>
+            <string name="ScriptGuid">{7b8a1617-e42e-443f-8e1c-fbd4cef01439}</string>
+            <ProtectedString name="Source"><![CDATA[local httpService = game:GetService("HttpService")
+
+local http = { 
+	JSON = {},
+	Encryption = require("@self/Encryption")
+}
+
+export type Headers = {
+	authorization: string?,                   -- Bearer token or other authorization methods
+	accept: string?,                          -- Media types (e.g., "application/json")
+	["accept-encoding"]: string?,             -- Acceptable encodings (e.g., "gzip, deflate")
+	["content-type"]: string?,                -- Content type (e.g., "application/json")
+	["content-length"]: number?,              -- Length of the body in bytes
+	["user-agent"]: string?,                  -- User agent string (browser or client)
+	host: string?,                            -- Domain name (required in HTTP/1.1)
+	referer: string?,                         -- URL of the referring page
+	cookie: string?,                          -- Cookies (name=value pairs)
+	["cache-control"]: string?,               -- Caching instructions (e.g., "no-cache")
+	["if-modified-since"]: string?,           -- Last modification date (e.g., "Wed, 21 Oct 2015 07:28:00 GMT")
+	["accept-language"]: string?,             -- Language preferences (e.g., "en-US,en;q=0.9")
+	connection: string?,                      -- Connection control (e.g., "keep-alive")
+	["x-csrf-token"]: string?,                -- CSRF Token for security (e.g., anti-CSRF protection)
+	["authorization-token"]: string?,         -- Token for custom authorization (if needed)
+	["x-requested-with"]: string?,            -- Usually "XMLHttpRequest" for AJAX requests
+	["upgrade-insecure-requests"]: number?,   -- Whether to upgrade HTTP to HTTPS
+	["strict-transport-security"]: string?,   -- Enforces secure connections (e.g., "max-age=31536000; includeSubDomains")
+	["access-control-allow-origin"]: string?, -- CORS header allowing cross-origin requests
+
+	-- Additional headers:
+	["x-frame-options"]: string?,             -- Controls whether the browser can display content in a <frame>, <iframe>, etc. (for clickjacking protection)
+	["x-content-type-options"]: string?,      -- Prevents MIME-sniffing (e.g., "nosniff")
+	["content-encoding"]: string?,            -- Specifies encoding transformations applied to the body (e.g., "gzip")
+	etag: string?,                            -- Unique identifier for a resource version, used in caching
+	["if-none-match"]: string?,               -- Conditional GET requests based on ETag
+	["if-range"]: string?,                    -- Allows partial content requests (if resource hasn’t changed)
+	range: string?,                           -- Requests specific byte range (e.g., "bytes=500-999")
+	["x-powered-by"]: string?,                -- Information about the technology used by the server (e.g., "PHP/7.4.3")
+	date: string?,                            -- Date and time of the message's creation
+	origin: string?,                          -- CORS: Origin of the request
+	server: string?,                          -- Information about the software used by the origin server (e.g., "nginx/1.19.6")
+	vary: string?,                            -- Specifies how the response varies based on request headers (e.g., "Accept-Encoding")
+	["content-disposition"]: string?,         -- Instructs how to handle content (e.g., "attachment; filename=example.txt")
+	["accept-ranges"]: string?,               -- Indicates the types of ranges the server supports (e.g., "bytes")
+	["x-request-id"]: string?,                -- Unique ID for the request (for tracing purposes)
+	["x-real-ip"]: string?,                   -- The real IP address of the client (often used in reverse proxy setups)
+	["x-forwarded-for"]: string?,             -- A list of IP addresses the request has passed through (useful for reverse proxies)
+	["x-xss-protection"]: string?,            -- Cross-site scripting (XSS) filter settings (e.g., "1; mode=block")
+}
+
+
+export type Method = "GET" | "HEAD" | "POST" | "PUT" | "DELETE" | "OPTIONS" | "TRACE" | "PATCH"
+
+export type RequestResponse = {
+	Success: boolean,
+	StatusCode: number,
+	StatusMessage: string,
+	Headers: Headers,
+	Body: any
+}
+
+function http:Post(
+	options: {
+		url: string,
+		data: string,
+		content_type: Enum.HttpContentType?,
+		compress: boolean?,
+		headers: Headers?
+	}
+)
+	return httpService:PostAsync(options.url, options.data, options.content_type, options.compress, options.headers)
+end
+
+function http:Get(
+	options: {
+		url: string,
+		nocache: boolean?,
+		headers: Headers?,
+	}
+)
+	return httpService:GetAsync(options.url, options.nocache, options.headers)
+end
+
+function http:Request(
+	options: {
+		url: string,
+		method: Method,
+		headers: Headers?,
+		body: string?,
+		compress: Enum.HttpCompression?
+	}
+): RequestResponse
+	local body = options.body
+	return httpService:RequestAsync({
+		Url = options.url,
+		Method = options.method,
+		Headers = options.headers,
+		Body = typeof(body) == "table" and http.JSON:Encode(body) or body,
+		Compress = options.compress
+	})
+end
+
+function http:UrlEncode(url: string)
+	return httpService:UrlEncode(url)
+end
+
+function http.JSON:Encode(input: string)
+	return httpService:JSONEncode(input)
+end
+
+function http.JSON:Decode(input: string)
+	return httpService:JSONDecode(input)
+end
+
+return http]]></ProtectedString>
+        </Properties>
+        <Item class="ModuleScript" referent="RBXNL5VBAZ9MCWBE3QG2461ES0T23D1OP8L">
+            <Properties>
+                <string name="Name">Encryption</string>
+                <string name="ScriptGuid">{7622903a-ddec-4723-89dd-b2ce682435a8}</string>
+                <ProtectedString name="Source"><![CDATA[local Encryption = {
+	Base64 = {}
+}
+
+local stringByte = string.byte
+local stringChar = string.char
+
+local mathFloor = math.floor
+
+local tableConcat = table.concat
+local tableRemove = table.remove
+
+local rshift = bit32.rshift
+
+local base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+function Encryption.Base64:Encode(input: string)
+	local output = {}
+	local padding = ""
+
+	if #input % 3 == 1 then
+		padding = "=="
+		input = input .. "\0\0"
+	elseif #input % 3 == 2 then
+		padding = "="
+		input = input .. "\0"
+	end
+
+	for i = 1, #input, 3 do
+		local byte1 = stringByte(input, i)
+		local byte2 = stringByte(input, i + 1)
+		local byte3 = stringByte(input, i + 2)
+
+		local index1 = mathFloor(byte1 / 4)
+		local index2 = ((byte1 % 4) * 16) + mathFloor(byte2 / 16)
+		local index3 = ((byte2 % 16) * 4) + mathFloor(byte3 / 64)
+		local index4 = byte3 % 64
+
+		output[#output + 1] = base64Chars:sub(index1 + 1, index1 + 1)
+		output[#output + 1] = base64Chars:sub(index2 + 1, index2 + 1)
+		output[#output + 1] = base64Chars:sub(index3 + 1, index3 + 1)
+		output[#output + 1] = base64Chars:sub(index4 + 1, index4 + 1)
+	end
+
+	local result = tableConcat(output)
+	return result:sub(1, #result - #padding) .. padding
+end
+
+function Encryption.Base64:Decode(encodedStr)
+	local decodedStr = {}
+	encodedStr = encodedStr:gsub("[^A-Za-z0-9+/=]", "")
+	encodedStr = encodedStr:gsub("=*$", "")
+	for i = 1, #encodedStr, 4 do
+		local a, b, c, d = encodedStr:sub(i, i), encodedStr:sub(i + 1, i + 1), encodedStr:sub(i + 2, i + 2), encodedStr:sub(i + 3, i + 3)
+		
+		local n1 = base64Chars:find(a)
+		local n2 = base64Chars:find(b)
+		local n3 = base64Chars:find(c)
+		local n4 = base64Chars:find(d)
+
+		n1 = n1 - 1
+		n2 = n2 - 1
+		n3 = n3 - 1
+		n4 = n4 - 1
+
+		local combined = (n1 * 2^18) + (n2 * 2^12) + (n3 * 2^6) + n4
+
+		decodedStr[#decodedStr + 1] = stringChar(rshift(combined, 16) % 256)
+		decodedStr[#decodedStr + 1] = stringChar(rshift(combined, 8) % 256)
+		decodedStr[#decodedStr + 1] = stringChar(combined % 256)
+	end
+
+	return tableConcat(decodedStr)
+end
+
+
+return Encryption]]></ProtectedString>
+            </Properties>
+        </Item>
+    </Item>
+</roblox>
