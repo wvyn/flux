@@ -1,0 +1,51 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXQM5UGPGWNSNW28OVQT9N40PAJIPA3V9O">
+        <Properties>
+            <string name="Name">ObjectWrapper</string>
+            <string name="ScriptGuid">{ffc8ea9d-3d2e-4a4b-8178-c98a90f4b5cf}</string>
+            <ProtectedString name="Source"><![CDATA[local ObjectWrapper = {}
+
+--[[ objectTable parameter is special and is not required ]]
+function ObjectWrapper.wrap<objectType, wrapperType, objectTable>(object: objectType, wrapper: wrapperType, objectTable: objectTable?): (objectType & wrapperType) & (() -> objectType)
+	return setmetatable(objectTable or {}, {
+		__index = function(metaWrapper, index)
+			local wrapperGet = rawget(wrapper, index)
+			if wrapperGet then 
+				local typeOfProperty = typeof(wrapperGet)
+				if typeOfProperty == "function" then
+					return function(...)
+						return wrapperGet(metaWrapper, select(2, ...))
+					end
+				else
+					return wrapperGet
+				end
+			else
+				local property = object[index]
+				local typeOfProperty = typeof(property)
+				if typeOfProperty == "function" then
+					return function(...)
+						return property(objectTable or object, select(2, ...))
+					end
+				else
+					return property
+				end
+			end
+		end,
+
+		__newindex = function(_, index, value)
+			xpcall(function()
+				(objectTable or object)[index] = value
+			end, function()
+				wrapper[index] = value
+			end)
+		end,
+
+		__call = function() return objectTable or object end
+	})
+end
+
+return ObjectWrapper]]></ProtectedString>
+        </Properties>
+    </Item>
+</roblox>
