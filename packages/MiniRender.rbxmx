@@ -1,0 +1,101 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXRD337GRIMCUYEBB6PPICKJ3O6Y8WQ66V">
+        <Properties>
+            <string name="Name">MiniRender</string>
+            <string name="ScriptGuid">{2e48b90f-5675-4584-bb57-fe7110683ab2}</string>
+            <ProtectedString name="Source"><![CDATA[local MiniRender = {}
+
+function MiniRender.new()
+	local self = setmetatable({}, { __index = MiniRender })
+	self.RenderModel = Instance.new("Model")
+	self.RenderModel.Name = "RenderModel"
+	self.InstancePool = {}
+
+	self.GetPartBoundsParent = workspace
+	self.GetPartBoundsInRadius = workspace.GetPartBoundsInRadius
+	return self
+end
+
+function MiniRender:GetRender(
+	settings: {
+		Center: Vector3, -- Center Position for the Render
+
+		RenderDistance: number, -- Radius of the render
+		RenderScale: number, -- Size of the result render
+
+		OverlapParams: OverlapParams?, -- OverlapParams for Rendering
+
+		Ignore: {
+			MaxVolume: number,
+			MinAxisSize: number,
+		},
+
+		OnNewPart: (OriginalPart: BasePart, NewPart: BasePart) -> any,
+		OnPartRendered: (OriginalPart: BasePart, NewPart: BasePart) -> any
+	}
+)
+	settings.Ignore = settings.Ignore or {}
+
+	local instanceNew = Instance.new
+
+	local GetPartBoundsParent = self.GetPartBoundsParent
+	local GetPartBoundsInRadius = self.GetPartBoundsInRadius
+
+	local centerRender = settings.Center
+
+	local inBoundParts = GetPartBoundsInRadius(GetPartBoundsParent, centerRender, settings.RenderDistance, settings.OverlapParams)
+
+	local renderScale = settings.RenderScale
+
+	local maxVolume = settings.Ignore.MaxVolume or 40
+	local minAxisSize = settings.Ignore.MinAxisSize or 4
+
+	local renderModel: Model, instancePool, partUseIndex = self.RenderModel, self.InstancePool, 0
+	local onNewPart = settings.OnNewPart
+	local OnPartRendered = settings.OnPartRendered
+
+	local renderModelPosition = renderModel:GetPivot().Position
+	for _, part: BasePart in next, inBoundParts do
+		local partSize = part.Size
+		local partSizeX, partSizeY, partSizeZ = partSize.X, partSize.Y, partSize.Z
+
+		local partVolume = partSizeX * partSizeY * partSizeZ
+
+		if partVolume < maxVolume or partSizeX < minAxisSize or partSizeY < minAxisSize or partSizeZ < minAxisSize then continue end
+		partUseIndex += 1
+
+		local newPart = instancePool[partUseIndex]
+		if not newPart then
+			newPart = instanceNew("Part")
+			newPart.Anchored = true
+			newPart.Massless = true
+			newPart.CanCollide = false
+			newPart.CanTouch = false
+			newPart.CanQuery = false
+			newPart.Parent = renderModel
+
+			instancePool[partUseIndex] = newPart
+			if onNewPart then onNewPart(newPart, part, inBoundParts) end
+		end
+
+		newPart.Orientation = part.Orientation
+		newPart.Position = renderModelPosition + (part.Position - centerRender) * renderScale
+
+		newPart.Size = partSize * renderScale
+
+		if OnPartRendered then OnPartRendered(newPart, part, inBoundParts) end
+	end
+
+	for index, part: BasePart in next, instancePool, partUseIndex ~= 0 and partUseIndex or nil do
+		part:Destroy()
+		instancePool[index] = nil
+	end
+
+	return renderModel
+end
+
+return MiniRender]]></ProtectedString>
+        </Properties>
+    </Item>
+</roblox>
