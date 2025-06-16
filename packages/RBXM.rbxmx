@@ -1,0 +1,131 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXFF7N9140ZWMLFLCFPOEP13HUJIMSARGU">
+        <Properties>
+            <string name="Name">RBXM</string>
+            <string name="ScriptGuid">{4d86cab3-3fe0-41d0-840c-a5d8667a306b}</string>
+            <ProtectedString name="Source"><![CDATA[-- REMAKE RBXM LATER
+
+local httpService = game:GetService("HttpService")
+local scriptEditorService = game:GetService("ScriptEditorService")
+
+local RBXM = {}
+
+local function referent()
+	local chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	local result = ""
+	for i = 1, 32 do
+		local index = math.random(1, #chars)
+		result = result .. chars:sub(index, index)
+	end; return result
+end
+
+local function loopInstances(bufferArray: { string }, instances: { Instance }, indentLevel: number)
+	local indent = string.rep("    ", indentLevel)
+	for _, instance in next, instances do
+		local childIndent = string.rep("    ", indentLevel + 1)
+		local propIndent = string.rep("    ", indentLevel + 2)
+
+		bufferArray[#bufferArray + 1] = indent .. `<Item class="{instance.ClassName}" referent="RBX{referent()}">`
+		bufferArray[#bufferArray + 1] = childIndent .. `<Properties>`
+		bufferArray[#bufferArray + 1] = propIndent .. `<string name="Name">{instance.Name}</string>`
+
+		if instance:IsA("BaseScript") or instance:IsA("ModuleScript") then
+			bufferArray[#bufferArray + 1] = propIndent .. `<string name="ScriptGuid">{httpService:GenerateGUID()}</string>`
+			bufferArray[#bufferArray + 1] = propIndent .. `<ProtectedString name="Source"><![CDATA[` .. scriptEditorService:GetEditorSource(instance) .. `]]></ProtectedString>`
+		end
+
+		bufferArray[#bufferArray + 1] = childIndent .. `</Properties>`
+		loopInstances(bufferArray, instance:GetChildren(), indentLevel + 1)
+		bufferArray[#bufferArray + 1] = indent .. `</Item>`
+	end
+end
+
+function RBXM:GetXML(instances: { Instance })
+	local bufferArray = {
+		[[<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">]],
+		[[    <Meta name="ExplicitAutoJoints">true</Meta>]],
+	}
+
+	loopInstances(bufferArray, instances, 1)
+	bufferArray[#bufferArray + 1] = [[</roblox>]]
+	return table.concat(bufferArray, "\n")
+end
+
+
+export type RBXMInstance = {
+	ClassName: string,
+	Referent: string,
+	Name: string,
+	
+	Children: RBXMInstance,
+	Parent: RBXMInstance?,
+	
+	Source: string?,
+	ScriptGuid: string?
+}
+
+local function parseItem(xml: string, startIndex: number): (RBXMInstance?, number)
+	local instance = {}
+
+	local itemStart, itemTagEnd, className, referent = xml:find('<Item class="(.-)" referent="(.-)">', startIndex)
+	if not itemStart then return nil, startIndex end
+	instance.ClassName = className
+	instance.Referent = referent
+	instance.Children = {}
+
+	local propertiesStart = xml:find("<Properties>", itemTagEnd)
+	local propertiesEnd = xml:find("</Properties>", propertiesStart)
+	local properties = xml:sub(propertiesStart, propertiesEnd + #"</Properties>")
+	instance.Name = properties:match('<string name="Name">(.-)</string>')
+	instance.ScriptGuid = properties:match('<string name="ScriptGuid">(.-)</string>')
+	instance.Source = properties:match('<ProtectedString name="Source"><!%[CDATA%[(.-)%]%]></ProtectedString>')
+
+	local searchIndex = propertiesEnd + #"</Properties>"
+
+	while true do
+		local nextItemStart = xml:find("<Item", searchIndex)
+		local itemCloseTag = xml:find("</Item>", searchIndex)
+		
+		if not nextItemStart or (itemCloseTag and itemCloseTag < nextItemStart) then
+			return instance, itemCloseTag and (itemCloseTag + #"</Item>") or searchIndex
+		end
+
+		local child, newIndex = parseItem(xml, nextItemStart)
+		if not child then break end
+		child.Parent = instance
+		instance.Children[#instance.Children + 1] = child
+
+		searchIndex = newIndex
+	end
+
+	return instance, searchIndex
+end
+
+local function extractItems(xml: string): { RBXMInstance }
+	local results = {}
+	local index = 1
+	while true do
+		local nextStart = xml:find("<Item", index)
+		if not nextStart then break end
+
+		local item, newIndex = parseItem(xml, nextStart)
+		if not item then break end
+
+		results[#results + 1] = item
+		index = newIndex
+	end
+	return results
+end
+
+
+
+function RBXM:GetInstances(content: string): { RBXMInstance }
+	return extractItems(content)
+end
+
+
+return RBXM]]></ProtectedString>
+        </Properties>
+    </Item>
+</roblox>
