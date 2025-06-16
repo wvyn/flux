@@ -1,0 +1,267 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+<Meta name="ExplicitAutoJoints">true</Meta>
+<Item class="ModuleScript" referent="RBXLJ19MADNIVLMPBXX55FRK8F93I0NXIOA">
+<Properties>
+<string name="Name">Commands</string>
+<string name="ScriptGuid">{65e9305f-5ddf-4e6d-9855-ba0281af1a1b}</string>
+<ProtectedString name="Source"><![CDATA[local CLI_d = require("./CLI.d")
+
+local Commands = {}
+local installedCommands = {}
+for _, module in next, script:GetChildren() do
+	if module.Name == "Commands.d" or module.Name == "CommandUtils" then continue end
+	installedCommands[module.Name] = require(module)
+end
+
+Commands.__installed = installedCommands
+function Commands.input(self: CLI_d.CommandLine, input: string)
+	for _, sequentialCommand in next, input:split(";") do
+		local commandSuccessful = false
+		for _, errorCommand in next, sequentialCommand:split("||") do
+			if commandSuccessful then break end
+			commandSuccessful = true
+			for _, successCommand in next, errorCommand:split("&&") do
+				if not commandSuccessful then break end
+				local parameters = successCommand:split(" ")
+
+				local command = parameters[1]
+				local arguments = {}
+				local flags = {}
+
+				local inFlag = false
+				for i = 2, #parameters do
+					local text = parameters[i]
+					if text:sub(1, 1) == "-" then
+						inFlag = true
+						flags[#flags + 1] = text
+					elseif inFlag then
+						if typeof(flags[#flags]) == "string" then
+							flags[#flags] = { flags[#flags], text }
+						else
+							local flag = flags[#flags]
+							flag[#flag + 1] = text
+						end
+					else
+						arguments[#arguments + 1] = text
+					end
+				end
+
+				local module = installedCommands[command]
+				if module then
+					commandSuccessful = module.__run(self, {
+						command = command,
+						arguments = arguments,
+						flags = flags,
+						input = successCommand,
+						absoluteInput = input,
+						subCommand = parameters[2]:sub(1, 1) ~= "-" and parameters[2] or nil
+					})
+				else
+					self:stderr(`'{command}' is not recognized as an internal or external command.`, true)
+					commandSuccessful = false
+				end
+			end
+		end
+	end
+end
+
+return Commands]]></ProtectedString>
+</Properties>
+<Item class="ModuleScript" referent="RBXX4DA5SZN8JPBH7N2P222NTLLP782K2DP">
+<Properties>
+<string name="Name">Commands.d</string>
+<string name="ScriptGuid">{8666b85f-b0d2-4a93-8955-7fdb6486bed0}</string>
+<ProtectedString name="Source"><![CDATA[export type CommandParameters = {
+	command: string,
+	arguments: { string },
+	flags: { string | { string } },
+	input: string,
+	absoluteInput: string,
+	subCommand: string
+}
+
+return {}]]></ProtectedString>
+</Properties>
+</Item>
+<Item class="ModuleScript" referent="RBXQP8WLO9K97FCP7C3DSDXIJM01YNHUB3B">
+<Properties>
+<string name="Name">flux</string>
+<string name="ScriptGuid">{ad0240fd-d4e8-41c8-9d9d-2dbde6541705}</string>
+<ProtectedString name="Source"><![CDATA[local scriptEditorService = game:GetService("ScriptEditorService")
+
+local http = require("../http")
+
+local Github = require("../Github")
+local CommandUtils = require("./CommandUtils")
+
+local CLI_d = require("../CLI.d")
+local Commands_d = require("./Commands.d")
+
+local RBXM = require("../RBXM")
+
+local flux = {}
+local GITHUB = {}
+
+local tableConcat = table.concat
+
+function flux.__run(self: CLI_d.CommandLine, commandParameters: Commands_d.CommandParameters)
+	local subCommand = commandParameters.subCommand
+	
+	if subCommand == "push" then
+		return flux.push(self, commandParameters)
+	elseif subCommand == "pull" then
+		return flux.pull(self, commandParameters)
+	elseif subCommand == "delete" then
+		return flux.delete(self, commandParameters)
+	end
+	
+	return false
+end
+
+function flux.push(self: CLI_d.CommandLine, commandParameters: Commands_d.CommandParameters)
+	local repository = commandParameters.arguments[2]
+	if not repository then return end
+	
+	local message = tableConcat(CommandUtils.findFlag(commandParameters.flags, "-m") or { "Updates" }, " ")
+	local branch = tableConcat(CommandUtils.findFlag(commandParameters.flags, "-b") or { "main" }, " ")
+	
+	local specifiedFile = CommandUtils.findFlag(commandParameters.flags, "-f")
+	specifiedFile = specifiedFile and tableConcat(specifiedFile, " ")
+	
+	local github: Github.Github
+	if GITHUB[self.Environment.GIT_AUTHORIZATION] then
+		github = GITHUB[self.Environment.GIT_AUTHORIZATION]
+	else
+		github = Github.new({
+			Authorization = self.Environment.GIT_AUTHORIZATION,
+		}); GITHUB[self.Environment.GIT_AUTHORIZATION] = github
+	end
+	
+	local cwd = self.CWD
+	for _, file in next, cwd:GetChildren() do
+		if (not specifiedFile or specifiedFile and specifiedFile == file.Name) and (file:IsA("BaseScript") or file:IsA("ModuleScript") or file:IsA("Folder")) then
+			local read = github:ReadFile({
+				Branch = branch,
+				Repository = repository,
+				Path = `packages/{file.Name}.rbxmx`,
+			})
+			
+			local response = github:UpdateFile({
+				Branch = branch,
+				Repository = repository,
+				Path = `packages/{file.Name}.rbxmx`,
+				Message = message,
+				Content = RBXM:GetXML({ file }),
+				SHA = read.sha
+			})
+			
+			self:stdout(`Pushed {file.Name}`)
+		end
+	end
+	
+	return true
+end
+
+function flux.pull(self: CLI_d.CommandLine, commandParameters: Commands_d.CommandParameters)
+	local repository = commandParameters.arguments[2]
+	if not repository then return end
+	
+	local file = commandParameters.arguments[3]
+	if not file then return end
+	
+	local branch = tableConcat(CommandUtils.findFlag(commandParameters.flags, "-b") or { "main" }, " ")
+	
+	local github: Github.Github
+	if GITHUB[self.Environment.GIT_AUTHORIZATION] then
+		github = GITHUB[self.Environment.GIT_AUTHORIZATION]
+	else
+		github = Github.new({
+			Authorization = self.Environment.GIT_AUTHORIZATION,
+		}); GITHUB[self.Environment.GIT_AUTHORIZATION] = github
+	end
+	
+	local cwd = self.CWD
+	local read = github:ReadFile({
+		Branch = branch,
+		Repository = repository,
+		Path = `packages/{file}.rbxmx`,
+	})
+	
+	if read.content then
+		local content = http.Encryption.Base64:Decode(read.content)
+		local instances = {}
+		for _, instance in next, RBXM:GetInstances(content) do
+			local object = Instance.new(instance.ClassName)
+			object.Name = instance.Name
+			if instance.Source then object.Source = instance.Source end
+			object.Parent = instance.Parent and instances[`{instance.Parent.Name}{instance.Parent.Referent}`] or cwd
+			instances[`{instance.Name}{instance.Referent}`] = object
+			self:stdout(`Created {instance.Name}`)
+		end
+	end
+	
+	self:stdout(`Pulled {file.Name}`)
+	return true
+end
+
+function flux.delete(self: CLI_d.CommandLine, commandParameters: Commands_d.CommandParameters)
+	local repository = commandParameters.arguments[2]
+	if not repository then return end
+
+	local file = commandParameters.arguments[3]
+	if not file then return end
+	
+	local branch = tableConcat(CommandUtils.findFlag(commandParameters.flags, "-b") or { "main" }, " ")
+	local message = tableConcat(CommandUtils.findFlag(commandParameters.flags, "-m") or { "Updates" }, " ")
+	
+	local github: Github.Github
+	if GITHUB[self.Environment.GIT_AUTHORIZATION] then
+		github = GITHUB[self.Environment.GIT_AUTHORIZATION]
+	else
+		github = Github.new({
+			Authorization = self.Environment.GIT_AUTHORIZATION,
+		}); GITHUB[self.Environment.GIT_AUTHORIZATION] = github
+	end
+	
+	local read = github:ReadFile({
+		Branch = branch,
+		Repository = repository,
+		Path = `packages/{file}.rbxmx`,
+	})
+	
+	local response = github:DeleteFile({
+		Branch = branch,
+		Repository = repository,
+		Path = `packages/{file}.rbxmx`,
+		Message = message,
+		SHA = read.sha
+	})
+	
+	self:stdout(`Deleted {file}`)
+	return true
+end
+
+return flux]]></ProtectedString>
+</Properties>
+</Item>
+<Item class="ModuleScript" referent="RBXFLM6BHT5OTPEKVOMJ7PIS4M63EJZI7D9">
+<Properties>
+<string name="Name">CommandUtils</string>
+<string name="ScriptGuid">{6a8f1160-a08a-4102-a7b8-321f92de1593}</string>
+<ProtectedString name="Source"><![CDATA[local CommandUtils = {}
+
+function CommandUtils.findFlag(flags: { string | { string } }, flag: string)
+	for _, flagArguments in next, flags do
+		if typeof(flagArguments) == "string" and flagArguments == flag then
+			return {}
+		elseif typeof(flagArguments) == "table" and flagArguments[1] == flag then
+			return { select(2, unpack(flagArguments)) }
+		end
+	end
+end
+
+return CommandUtils]]></ProtectedString>
+</Properties>
+</Item>
+</Item>
+</roblox>
