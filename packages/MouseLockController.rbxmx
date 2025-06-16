@@ -1,0 +1,742 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXE56YHTXQNQMA5NQSD6Z8E6OOLDC4WRDP">
+        <Properties>
+            <string name="Name">MouseLockController</string>
+            <string name="ScriptGuid">{c0e1c2a8-9265-452f-a2a1-dc713d506552}</string>
+            <ProtectedString name="Source"><![CDATA[--[[
+
+	@ Name: SmoothShiftLock
+	@ Author: rixtys
+	@ Version: 1.0.8
+	
+	@ Desc: Smooth shift lock module that adds smoothness to the Roblox's shift lock
+	│ @ for this to work, disable the default Roblox's shift lock
+	│ @ game.StarterPlayer.EnableMouseLockOption = false
+	│ @ and start the custom shift lock module with
+	└ @ SmoothShiftLock:Init()
+	
+	@ Methods = {
+		SmoothShiftLock:Init()
+		Initializes the module. (Should be done on client and only once)
+		
+		SmoothShiftLock:IsEnabled()
+		Gets ShiftLock's enabled state
+		
+		module.ToggleShiftLock:Fire()
+		Toogles ShiftLock. (Automatically bind to SHIFT_LOCK_KEYBINDS on initialization)
+	}
+
+--]]
+
+local SmoothShiftLock = {}
+SmoothShiftLock.__index = SmoothShiftLock;
+
+-- [[ Variables ]]:
+
+--// Services and requires
+local Players = game:GetService("Players");
+local WorkspaceService = game:GetService("Workspace");
+local RunService = game:GetService("RunService");
+local UserInputService = game:GetService("UserInputService");
+local TweenService = game:GetService("TweenService");
+local Maid = require(script.Utils:WaitForChild("Maid"));
+local Spring = require(script.Utils:WaitForChild("Spring"));
+
+--// Instances
+local LocalPlayer = Players.LocalPlayer;
+
+--// Bindables
+local ToggleEvent = script:WaitForChild("ToggleShiftLock");
+
+--// Configuration
+local config = {
+	["CHARACTER_SMOOTH_ROTATION"]   = false,                       --// If your character should rotate smoothly or not
+	["CHARACTER_ROTATION_SPEED"]    = 4,                          --// How quickly character rotates smoothly
+	["TRANSITION_SPRING_DAMPER"]    = 0.7,                        --// Camera transition spring damper, test it out to see what works for you
+	["CAMERA_TRANSITION_IN_SPEED"]  = 20,                         --// How quickly locked camera moves to offset position
+	["CAMERA_TRANSITION_OUT_SPEED"] = 20,                         --// How quickly locked camera moves back from offset position
+	["LOCKED_CAMERA_OFFSET"]        = Vector3.new(1.75, 0.25, 0), --// Locked camera offset
+	["LOCKED_MOUSE_ICON"]           =                             --// Locked mouse icon
+		"rbxassetid://483281072",
+	["SHIFT_LOCK_KEYBINDS"]         =                             --// Shift lock keybinds
+		{Enum.KeyCode.LeftShift, Enum.KeyCode.RightShift}
+}
+
+local mouseLockGui = script:WaitForChild("MouseLockGui")
+mouseLockGui:WaitForChild("Center").Image = config.LOCKED_MOUSE_ICON
+mouseLockGui.Parent = LocalPlayer.PlayerGui
+
+--// Setup
+local maid = Maid.new();
+
+-- [[ Functions ]]:
+
+--// Setup smooth shift lock on client (Run once and on a LocalScript)
+function SmoothShiftLock:Init()
+	local managerMaid = Maid.new();
+	
+	SmoothShiftLock:CharacterAdded()
+	managerMaid:GiveTask(LocalPlayer.CharacterAdded:Connect(function()
+		self:CharacterAdded();
+	end));
+end;
+
+--// Character added event function
+function SmoothShiftLock:CharacterAdded()
+	local self = setmetatable({}, SmoothShiftLock);
+	_G.ShiftLock = self
+	--// Instances
+	self.Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait();
+	self.RootPart = self.Character:WaitForChild("HumanoidRootPart");
+	self.Humanoid = self.Character:WaitForChild("Humanoid");
+	self.Head = self.Character:WaitForChild("Head");
+	--// Other
+	self.PlayerMouse = LocalPlayer:GetMouse();
+	self.Camera = WorkspaceService.CurrentCamera;
+	--// Setup
+	self.ENABLED = false;
+	self.connectionsMaid = Maid.new();
+	self.camOffsetSpring = Spring.new(Vector3.new(0, 0, 0));
+	self.camOffsetSpring.Damper = config.TRANSITION_SPRING_DAMPER;
+	
+	--//Game Settings
+	local gameSettings = UserSettings().GameSettings
+	self.connectionsMaid:GiveTask(gameSettings:GetPropertyChangedSignal("ControlMode"):Connect(function()
+		if gameSettings.ControlMode == Enum.ControlMode.Classic and self.ENABLED then
+			self:ToggleShiftLock(not self.ENABLED);
+		end
+	end))
+	
+	--// Bind keybinds
+	local keybindDebounce = tick()
+	self.connectionsMaid:GiveTask(UserInputService.InputBegan:Connect(function(input, gpe)
+		if (gpe or gameSettings.ControlMode == Enum.ControlMode.Classic or (tick() - keybindDebounce < 0.05)) then return end;
+
+		for _, keyBind in pairs(config.SHIFT_LOCK_KEYBINDS) do
+			if (input.KeyCode == keyBind) and (self.Humanoid and self.Humanoid.Health ~= 0) then
+				keybindDebounce = tick()
+				self:ToggleShiftLock(not self.ENABLED);
+			end;
+		end;
+	end));
+
+	--// Update camera offset
+	RunService:BindToRenderStep("MouseLockController", Enum.RenderPriority.Camera.Value + 2, function()
+		if self.Head.LocalTransparencyModifier > 0.6 then return end;
+
+		local camCF = self.Camera.CoordinateFrame;
+		local distance = (self.Head.Position - camCF.p).magnitude;
+
+		--// Camera offset
+		if (distance > 1) then	
+			self.Camera.CFrame = (self.Camera.CFrame * CFrame.new(self.camOffsetSpring.Position)); 
+
+			if (self.ENABLED) and (UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter) then
+				self:SetMouseState(self.ENABLED);
+			end;
+		end;
+	end)
+	
+	--// Bindables
+	self.connectionsMaid:GiveTask(ToggleEvent.Event:Connect(function(toggle: boolean)
+		if (self.Humanoid and self.Humanoid.Health ~= 0) then
+			self:ToggleShiftLock(toggle);
+		end;
+	end));
+	
+	--// On death
+	self.connectionsMaid:GiveTask(self.Humanoid.Died:Connect(function()
+		self:CharacterDiedOrRemoved();
+		return;
+	end));
+	
+	--// On character removing
+	self.connectionsMaid:GiveTask(LocalPlayer.CharacterRemoving:Connect(function()
+		self:CharacterDiedOrRemoved();
+		return;
+	end));
+
+	return self;
+end;
+
+--// Stop shiftlock upon character death or removal
+function SmoothShiftLock:CharacterDiedOrRemoved()
+	self:ToggleShiftLock(false);
+	
+	RunService:UnbindFromRenderStep("MouseLockController")
+	if self.connectionsMaid ~= nil then
+		self.connectionsMaid:Destroy();
+	end;
+	
+	maid:DoCleaning();
+end;
+
+--// Return shiftlock enabled state
+function SmoothShiftLock:IsEnabled(): boolean
+	return self.ENABLED;
+end;
+
+--// Set Enum.MouseBehavior to LockCenter or Default depending on shiftlock enabled
+function SmoothShiftLock:SetMouseState(enable : boolean)
+	UserInputService.MouseBehavior = (enable and Enum.MouseBehavior.LockCenter) or (Enum.MouseBehavior.Default);
+end;
+
+--// Change mouse icon depending on shiftlock enabled
+function SmoothShiftLock:SetMouseIcon(enable : boolean)
+	UserInputService.MouseIconEnabled = not enable
+end;
+
+--// Tween locked camera offset position
+function SmoothShiftLock:TransitionLockOffset(enable : boolean)
+	if (enable) then
+		self.camOffsetSpring.Speed = config.CAMERA_TRANSITION_IN_SPEED;
+		self.camOffsetSpring.Target = config.LOCKED_CAMERA_OFFSET;
+	else
+		self.camOffsetSpring.Speed = config.CAMERA_TRANSITION_OUT_SPEED;
+		self.camOffsetSpring.Target = Vector3.new(0, 0, 0);
+	end;
+end;
+
+--// Toggle shift lock
+function SmoothShiftLock:ToggleShiftLock(enable : boolean)
+	assert(typeof(enable) == typeof(false), "Enable value is not a boolean.");
+	self.ENABLED = enable;
+	
+	mouseLockGui.Enabled = enable
+
+	self:SetMouseState(self.ENABLED);
+	self:SetMouseIcon(self.ENABLED);
+	self:TransitionLockOffset(self.ENABLED);
+	
+	--// Start
+	if (self.ENABLED) then
+		maid:GiveTask(RunService.RenderStepped:Connect(function(delta)
+			if (self.Humanoid and self.RootPart) then 
+				self.Humanoid.AutoRotate = not self.ENABLED;
+			end;
+			--// Rotate character
+			if (self.ENABLED) and not self.Humanoid.PlatformStand and not self.RootPart.Anchored then
+				if not (self.Humanoid.Sit) and (config.CHARACTER_SMOOTH_ROTATION) then
+					local x, y, z = self.Camera.CFrame:ToOrientation();
+					self.RootPart.CFrame = self.RootPart.CFrame:Lerp(CFrame.new(self.RootPart.Position) * CFrame.Angles(0, y, 0), delta * 5 * config.CHARACTER_ROTATION_SPEED);
+				elseif not (self.Humanoid.Sit) then
+					local x, y, z = self.Camera.CFrame:ToOrientation();
+					self.RootPart.CFrame = CFrame.new(self.RootPart.Position) * CFrame.Angles(0, y, 0);
+				end;
+			end;
+			
+			--// Stop
+			if not (self.ENABLED) then 
+				maid:Destroy() end;
+		end));
+	end;
+	
+	return self;
+end;
+
+return SmoothShiftLock;]]></ProtectedString>
+        </Properties>
+        <Item class="Folder" referent="RBXLJ7ZUGABKQWX5R7Z1ZQW1OT7ZQR5ND8V">
+            <Properties>
+                <string name="Name">Utils</string>
+            </Properties>
+            <Item class="ModuleScript" referent="RBXSICLKL994298HGORI6XX44ALMMV3K70U">
+                <Properties>
+                    <string name="Name">Maid</string>
+                    <string name="ScriptGuid">{b35cc5e3-cf0f-49d2-b205-7c6901854aea}</string>
+                    <ProtectedString name="Source"><![CDATA[--[=[
+	Manages the cleaning of events and other things. Useful for
+	encapsulating state and make deconstructors easy.
+
+	See the [Five Powerful Code Patterns talk](https://developer.roblox.com/en-us/videos/5-powerful-code-patterns-behind-top-roblox-games)
+	for a more in-depth look at Maids in top games.
+
+	```lua
+	local maid = Maid.new()
+
+	maid:GiveTask(function()
+		print("Cleaning up")
+	end)
+
+	maid:GiveTask(workspace.ChildAdded:Connect(print))
+
+	-- Disconnects all events, and executes all functions
+	maid:DoCleaning()
+	```
+
+	@class Maid
+]=]
+-- luacheck: pop
+
+local Maid = {}
+Maid.ClassName = "Maid"
+
+--[=[
+	Constructs a new Maid object
+
+	```lua
+	local maid = Maid.new()
+	```
+
+	@return Maid
+]=]
+function Maid.new()
+	return setmetatable({
+		_tasks = {}
+	}, Maid)
+end
+
+--[=[
+	Returns true if the class is a maid, and false otherwise.
+
+	```lua
+	print(Maid.isMaid(Maid.new())) --> true
+	print(Maid.isMaid(nil)) --> false
+	```
+
+	@param value any
+	@return boolean
+]=]
+function Maid.isMaid(value)
+	return type(value) == "table" and value.ClassName == "Maid"
+end
+
+--[=[
+	Returns Maid[key] if not part of Maid metatable
+
+	```lua
+	local maid = Maid.new()
+	maid._current = Instance.new("Part")
+	print(maid._current) --> Part
+
+	maid._current = nil
+	print(maid._current) --> nil
+	```
+
+	@param index any
+	@return MaidTask
+]=]
+function Maid:__index(index)
+	if Maid[index] then
+		return Maid[index]
+	else
+		return self._tasks[index]
+	end
+end
+
+--[=[
+	Add a task to clean up. Tasks given to a maid will be cleaned when
+	maid[index] is set to a different value.
+
+	Task cleanup is such that if the task is an event, it is disconnected.
+	If it is an object, it is destroyed.
+
+	```
+	Maid[key] = (function)         Adds a task to perform
+	Maid[key] = (event connection) Manages an event connection
+	Maid[key] = (thread)           Manages a thread
+	Maid[key] = (Maid)             Maids can act as an event connection, allowing a Maid to have other maids to clean up.
+	Maid[key] = (Object)           Maids can cleanup objects with a `Destroy` method
+	Maid[key] = nil                Removes a named task.
+	```
+
+	@param index any
+	@param newTask MaidTask
+]=]
+function Maid:__newindex(index, newTask)
+	if Maid[index] ~= nil then
+		error(("Cannot use '%s' as a Maid key"):format(tostring(index)), 2)
+	end
+
+	local tasks = self._tasks
+	local oldTask = tasks[index]
+
+	if oldTask == newTask then
+		return
+	end
+
+	tasks[index] = newTask
+
+	if oldTask then
+		if type(oldTask) == "function" then
+			oldTask()
+		elseif type(oldTask) == "thread" then
+			task.cancel(oldTask)
+		elseif typeof(oldTask) == "RBXScriptConnection" then
+			oldTask:Disconnect()
+		elseif oldTask.Destroy then
+			oldTask:Destroy()
+		end
+	end
+end
+
+--[=[
+	Gives a task to the maid for cleanup, but uses an incremented number as a key.
+
+	@param task MaidTask -- An item to clean
+	@return number -- taskId
+]=]
+function Maid:GiveTask(task)
+	if not task then
+		error("Task cannot be false or nil", 2)
+	end
+
+	local taskId = #self._tasks+1
+	self[taskId] = task
+
+	if type(task) == "table" and (not task.Destroy) then
+		warn("[Maid.GiveTask] - Gave table task without .Destroy\n\n" .. debug.traceback())
+	end
+
+	return taskId
+end
+
+--[=[
+	Gives a promise to the maid for clean.
+
+	@param promise Promise<T>
+	@return Promise<T>
+]=]
+function Maid:GivePromise(promise)
+	if not promise:IsPending() then
+		return promise
+	end
+
+	local newPromise = promise.resolved(promise)
+	local id = self:GiveTask(newPromise)
+
+	-- Ensure GC
+	newPromise:Finally(function()
+		self[id] = nil
+	end)
+
+	return newPromise
+end
+
+--[=[
+	Cleans up all tasks and removes them as entries from the Maid.
+
+	:::note
+	Signals that are already connected are always disconnected first. After that
+	any signals added during a cleaning phase will be disconnected at random times.
+	:::
+
+	:::tip
+	DoCleaning() may be recursively invoked. This allows the you to ensure that
+	tasks or other tasks. Each task will be executed once.
+
+	However, adding tasks while cleaning is not generally a good idea, as if you add a
+	function that adds itself, this will loop indefinitely.
+	:::
+]=]
+function Maid:DoCleaning()
+	local tasks = self._tasks
+
+	-- Disconnect all events first as we know this is safe
+	for index, job in pairs(tasks) do
+		if typeof(job) == "RBXScriptConnection" then
+			tasks[index] = nil
+			job:Disconnect()
+		end
+	end
+
+	-- Clear out tasks table completely, even if clean up tasks add more tasks to the maid
+	local index, job = next(tasks)
+	while job ~= nil do
+		tasks[index] = nil
+		if type(job) == "function" then
+			job()
+		elseif type(job) == "thread" then
+			task.cancel(job)
+		elseif typeof(job) == "RBXScriptConnection" then
+			job:Disconnect()
+		elseif job.Destroy then
+			job:Destroy()
+		end
+		index, job = next(tasks)
+	end
+end
+
+--[=[
+	Alias for [Maid.DoCleaning()](/api/Maid#DoCleaning)
+
+	@function Destroy
+	@within Maid
+]=]
+Maid.Destroy = Maid.DoCleaning
+
+return Maid
+]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBX3PCWG6I20PI7OLY8YWLYEMSL2N6T3L1I">
+                <Properties>
+                    <string name="Name">Spring</string>
+                    <string name="ScriptGuid">{5d0419f0-f30a-41ae-b5b7-3d53c194f262}</string>
+                    <ProtectedString name="Source"><![CDATA[--[=[
+	A physical model of a spring, useful in many applications.
+	A spring is an object that will compute based upon Hooke's law. Properties only evaluate
+	upon index making this model good for lazy applications.
+	```lua
+	local RunService = game:GetService("RunService")
+	local UserInputService = game:GetService("UserInputService")
+	local spring = Spring.new(Vector3.new(0, 0, 0))
+	RunService.RenderStepped:Connect(function()
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+			spring.Target = Vector3.new(0, 0, 1)
+		else
+			spring.Target = Vector3.new(0, 0, 0)
+		end
+		print(spring.Position) -- A smoothed out version of the input keycode W
+	end)
+	```
+	A good visualization can be found here, provided by Defaultio:
+	https://www.desmos.com/calculator/hn2i9shxbz
+	@class Spring
+]=]
+local Spring = {}
+
+--[=[
+	Constructs a new Spring at the position and target specified, of type T.
+	```lua
+	-- Linear spring
+	local linearSpring = Spring.new(0)
+	-- Vector2 spring
+	local vector2Spring = Spring.new(Vector2.new(0, 0))
+	-- Vector3 spring
+	local vector3Spring = Spring.new(Vector3.new(0, 0, 0))
+	```
+	@param initial T -- The initial parameter is a number or Vector3 (anything with * number and addition/subtraction).
+	@param clock? () -> number -- The clock function is optional, and is used to update the spring
+	@return Spring<T>
+]=]
+function Spring.new(initial, clock)
+	local target = initial or 0
+	clock = clock or os.clock
+	return setmetatable({
+		_clock = clock;
+		_time0 = clock();
+		_position0 = target;
+		_velocity0 = 0*target;
+		_target = target;
+		_damper = 1;
+		_speed = 1;
+	}, Spring)
+end
+
+--[=[
+	Impulses the spring, increasing velocity by the amount given. This is useful to make something shake,
+	like a Mac password box failing.
+	@param velocity T -- The velocity to impulse with
+	@return ()
+]=]
+function Spring:Impulse(velocity)
+	self.Velocity = self.Velocity + velocity
+end
+
+--[=[
+	Instantly skips the spring forwards by that amount time
+	@param delta number -- Time to skip forwards
+	@return ()
+]=]
+function Spring:TimeSkip(delta)
+	local now = self._clock()
+	local position, velocity = self:_positionVelocity(now+delta)
+	self._position0 = position
+	self._velocity0 = velocity
+	self._time0 = now
+end
+
+--[=[
+	The current position at the given clock time. Assigning the position will change the spring to have that position.
+	```lua
+	local spring = Spring.new(0)
+	print(spring.Position) --> 0
+	```
+	@prop Position T
+	@within Spring
+]=]
+--[=[
+	Alias for [Spring.Position](/api/Spring#Position)
+	@prop p T
+	@within Spring
+]=]
+--[=[
+	The current velocity. Assigning the velocity will change the spring to have that velocity.
+	```lua
+	local spring = Spring.new(0)
+	print(spring.Velocity) --> 0
+	```
+	@prop Velocity T
+	@within Spring
+]=]
+--[=[
+	Alias for [Spring.Velocity](/api/Spring#Velocity)
+	@prop v T
+	@within Spring
+]=]
+--[=[
+	The current target. Assigning the target will change the spring to have that target.
+	```lua
+	local spring = Spring.new(0)
+	print(spring.Target) --> 0
+	```
+	@prop Target T
+	@within Spring
+]=]
+--[=[
+	Alias for [Spring.Target](/api/Spring#Target)
+	@prop t T
+	@within Spring
+]=]
+--[=[
+	The current damper, defaults to 1. At 1 the spring is critically damped. At less than 1, it
+	will be underdamped, and thus, bounce, and at over 1, it will be critically damped.
+	@prop Damper number
+	@within Spring
+]=]
+--[=[
+	Alias for [Spring.Damper](/api/Spring#Damper)
+	@prop d number
+	@within Spring
+]=]
+--[=[
+	The speed, defaults to 1, but should be between [0, infinity)
+	@prop Speed number
+	@within Spring
+]=]
+--[=[
+	Alias for [Spring.Speed](/api/Spring#Speed)
+	@prop s number
+	@within Spring
+]=]
+--[=[
+	The current clock object to syncronize the spring against.
+	@prop Clock () -> number
+	@within Spring
+]=]
+function Spring:__index(index)
+	if Spring[index] then
+		return Spring[index]
+	elseif index == "Value" or index == "Position" or index == "p" then
+		local position, _ = self:_positionVelocity(self._clock())
+		return position
+	elseif index == "Velocity" or index == "v" then
+		local _, velocity = self:_positionVelocity(self._clock())
+		return velocity
+	elseif index == "Target" or index == "t" then
+		return self._target
+	elseif index == "Damper" or index == "d" then
+		return self._damper
+	elseif index == "Speed" or index == "s" then
+		return self._speed
+	elseif index == "Clock" then
+		return self._clock
+	else
+		error(("%q is not a valid member of Spring"):format(tostring(index)), 2)
+	end
+end
+
+function Spring:__newindex(index, value)
+	local now = self._clock()
+
+	if index == "Value" or index == "Position" or index == "p" then
+		local _, velocity = self:_positionVelocity(now)
+		self._position0 = value
+		self._velocity0 = velocity
+		self._time0 = now
+	elseif index == "Velocity" or index == "v" then
+		local position, _ = self:_positionVelocity(now)
+		self._position0 = position
+		self._velocity0 = value
+		self._time0 = now
+	elseif index == "Target" or index == "t" then
+		local position, velocity = self:_positionVelocity(now)
+		self._position0 = position
+		self._velocity0 = velocity
+		self._target = value
+		self._time0 = now
+	elseif index == "Damper" or index == "d" then
+		local position, velocity = self:_positionVelocity(now)
+		self._position0 = position
+		self._velocity0 = velocity
+		self._damper = value
+		self._time0 = now
+	elseif index == "Speed" or index == "s" then
+		local position, velocity = self:_positionVelocity(now)
+		self._position0 = position
+		self._velocity0 = velocity
+		self._speed = value < 0 and 0 or value
+		self._time0 = now
+	elseif index == "Clock" then
+		local position, velocity = self:_positionVelocity(now)
+		self._position0 = position
+		self._velocity0 = velocity
+		self._clock = value
+		self._time0 = value()
+	else
+		error(("%q is not a valid member of Spring"):format(tostring(index)), 2)
+	end
+end
+
+function Spring:_positionVelocity(now)
+	local p0 = self._position0
+	local v0 = self._velocity0
+	local p1 = self._target
+	local d = self._damper
+	local s = self._speed
+
+	local t = s*(now - self._time0)
+	local d2 = d*d
+
+	local h, si, co
+	if d2 < 1 then
+		h = math.sqrt(1 - d2)
+		local ep = math.exp(-d*t)/h
+		co, si = ep*math.cos(h*t), ep*math.sin(h*t)
+	elseif d2 == 1 then
+		h = 1
+		local ep = math.exp(-d*t)/h
+		co, si = ep, ep*t
+	else
+		h = math.sqrt(d2 - 1)
+		local u = math.exp((-d + h)*t)/(2*h)
+		local v = math.exp((-d - h)*t)/(2*h)
+		co, si = u + v, u - v
+	end
+
+	local a0 = h*co + d*si
+	local a1 = 1 - (h*co + d*si)
+	local a2 = si/s
+
+	local b0 = -s*si
+	local b1 = s*si
+	local b2 = h*co - d*si
+
+	return
+		a0*p0 + a1*p1 + a2*v0,
+		b0*p0 + b1*p1 + b2*v0
+end
+
+return Spring]]></ProtectedString>
+                </Properties>
+            </Item>
+        </Item>
+        <Item class="BindableEvent" referent="RBXNAY89NPPPGV7DGO68XMIAIVVG68DTZL0">
+            <Properties>
+                <string name="Name">ToggleShiftLock</string>
+            </Properties>
+        </Item>
+        <Item class="ScreenGui" referent="RBX8D76KUL94ZHU457OWYZPXRRT6CZKZ101">
+            <Properties>
+                <string name="Name">MouseLockGui</string>
+            </Properties>
+            <Item class="ImageLabel" referent="RBX3ET8S7YARZNIRA6N759JKODV8BQ1MTR8">
+                <Properties>
+                    <string name="Name">Center</string>
+                </Properties>
+            </Item>
+        </Item>
+    </Item>
+</roblox>
