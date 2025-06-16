@@ -1,9 +1,9 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
 <Meta name="ExplicitAutoJoints">true</Meta>
-<Item class="ModuleScript" referent="RBXLJ19MADNIVLMPBXX55FRK8F93I0NXIOA">
+<Item class="ModuleScript" referent="RBX12GT6TLZA8RYG99I95DSI9TO2B0SLAF7">
 <Properties>
 <string name="Name">Commands</string>
-<string name="ScriptGuid">{65e9305f-5ddf-4e6d-9855-ba0281af1a1b}</string>
+<string name="ScriptGuid">{210b864e-89ce-4fb6-a969-eba2f3b2d301}</string>
 <ProtectedString name="Source"><![CDATA[local CLI_d = require("./CLI.d")
 
 local Commands = {}
@@ -67,10 +67,10 @@ end
 
 return Commands]]></ProtectedString>
 </Properties>
-<Item class="ModuleScript" referent="RBXX4DA5SZN8JPBH7N2P222NTLLP782K2DP">
+<Item class="ModuleScript" referent="RBXMKZ3AEM0FFBW4S4CDAS7PAXD22L5YDCF">
 <Properties>
 <string name="Name">Commands.d</string>
-<string name="ScriptGuid">{8666b85f-b0d2-4a93-8955-7fdb6486bed0}</string>
+<string name="ScriptGuid">{07805a68-2f22-43dc-bd62-45825ede02ef}</string>
 <ProtectedString name="Source"><![CDATA[export type CommandParameters = {
 	command: string,
 	arguments: { string },
@@ -83,10 +83,10 @@ return Commands]]></ProtectedString>
 return {}]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBXQP8WLO9K97FCP7C3DSDXIJM01YNHUB3B">
+<Item class="ModuleScript" referent="RBX522A7B9J5BAZWKBSSGQEA9P1DQNY7348">
 <Properties>
 <string name="Name">flux</string>
-<string name="ScriptGuid">{ad0240fd-d4e8-41c8-9d9d-2dbde6541705}</string>
+<string name="ScriptGuid">{a66c6cf6-8ca2-4ce8-bf2f-9ce498967976}</string>
 <ProtectedString name="Source"><![CDATA[local scriptEditorService = game:GetService("ScriptEditorService")
 
 local http = require("../http")
@@ -244,10 +244,10 @@ end
 return flux]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBXFLM6BHT5OTPEKVOMJ7PIS4M63EJZI7D9">
+<Item class="ModuleScript" referent="RBX6R7FJYXTSAL4RHZQQ8CIUOD95TB7B769">
 <Properties>
 <string name="Name">CommandUtils</string>
-<string name="ScriptGuid">{6a8f1160-a08a-4102-a7b8-321f92de1593}</string>
+<string name="ScriptGuid">{b1fcc4f8-f222-4ddb-9f65-09a0074e1fb4}</string>
 <ProtectedString name="Source"><![CDATA[local CommandUtils = {}
 
 function CommandUtils.findFlag(flags: { string | { string } }, flag: string)
