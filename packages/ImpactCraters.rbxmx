@@ -1,0 +1,287 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBX43RXA58BW5AVFOV5MSHMCF5UDFW61VC4">
+        <Properties>
+            <string name="Name">ImpactCraters</string>
+            <string name="ScriptGuid">{c55f5206-6c82-4535-ac63-aea201af36b2}</string>
+            <ProtectedString name="Source"><![CDATA[local ImpactCraters = {}
+
+local MergeTable = function(...)
+	local tables = {...}
+	local newTable = {}
+	local append = false
+	for i, tab in next, tables do
+		if i == 1 and #tab > 0 and tonumber(table.pack(next(tab))[1]) then append = true end
+		for i, v in next, tab do
+			if append then
+				table.insert(newTable, v)
+			else
+				if newTable[i] then continue end
+				newTable[i] = v
+			end
+		end
+	end; return newTable
+end
+
+function ImpactCraters.new()
+	local self = setmetatable({}, {__index = ImpactCraters})
+	self.RecentImpactSettings = nil
+	self.Chunks = {}
+	return self
+end
+
+function ImpactCraters:Impact(
+	settings: {
+		Origin: CFrame, --[REQUIRED] The Root CFrame the Chunks will spawn at.
+		Chunks: number, --[OPTIONAL] Number of Parts that will be spawned upon Impact.
+
+		ChunkSize: number, --[OPTIONAL] Chunk Size. 
+		ChunkZSpacing: number, --[OPTIONAL] Distance from Chunk and OriginPoistion.
+		ChunkProperties: {}, --[OPTIONAL] Set properties of the chunks. Mainly used when RaycastParams is left nil.
+		ChunkRandomRotation: boolean, -- [OPTIONAL] Using pi it will rotate the chunk in absolute random orientations.
+		ChunkRandomOrientationFactor: number, -- [OPTIONAL] how much should it rotate in a random direction
+		ChunkFloorYMultiplier: number, --[OPTIONAL] If the chunk doesn't go down far enough you can multiply it.
+
+		ChunkFunction: Function, --[OPTIONAL] a function that gets called everytime a chunk spawns and it's information passed through.
+
+		TweenInfo: TweenInfo, --[OPTIONAL] TweenInfo for the Chunk Tweening into Impact.
+		TweenProperties: {}, --[OPTIONAL] Properties manually set to tween.
+
+		RaycastParams: RaycastParams, --[OPTIONAL] Raycast downward to read properties of what is below it.
+		RaycastFloorAlignment: boolean --[OPTIONAL] Raycast downward to align with the floor.
+	}
+) if #self.Chunks > 0 then self:Debris() end
+	-- DEFAULT SETTINGS --
+	settings = MergeTable(settings, {
+		Chunks = 12,
+
+		ChunkSize = 5,
+		ChunkZSpacing = 9,
+		ChunkProperties = {},
+		ChunkRandomRotation = true,
+		ChunkRandomOrientationFactor = math.pi/10,
+		ChunkFloorYMultiplier = 1,
+
+		TweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Back),
+
+		RaycastParams = "DEFAULT-SETTINGS",
+		RaycastFloorAlignment = true
+	})
+
+	if settings.RaycastParams == "DEFAULT-SETTINGS" then
+		settings.RaycastParams = RaycastParams.new()
+
+		local filterDescendantsInstances = game:GetService("CollectionService"):GetTagged("Character")
+		table.insert(filterDescendantsInstances, workspace.ActiveStorage)
+
+		settings.RaycastParams.FilterDescendantsInstances = filterDescendantsInstances
+		settings.RaycastParams.FilterType = Enum.RaycastFilterType.Exclude
+	end
+	----------------------
+
+	local chunks = {}
+	for chunkIndex = 1, settings.Chunks do 
+		local chunkCFrame = settings.Origin * CFrame.fromEulerAnglesXYZ(0, 2 * (math.pi/settings.Chunks) * chunkIndex, 0) * CFrame.new(0, 0, -settings.ChunkZSpacing)
+		local chunkPosition = chunkCFrame.Position
+
+		local chunkRaycast
+		if settings.RaycastFloorAlignment and settings.RaycastParams then
+			chunkRaycast = workspace:Raycast((chunkCFrame * CFrame.new(0, 2, 0)).Position, -settings.Origin.UpVector * 40, settings.RaycastParams)
+			if chunkRaycast then
+				chunkPosition = chunkRaycast.Position
+			end
+		end
+
+		local chunkPartCFrame = CFrame.new(chunkPosition - Vector3.new(0, settings.ChunkSize * settings.ChunkFloorYMultiplier, 0))
+
+		local chunk = Instance.new("Part")
+		chunk.Name = "Chunk"
+		chunk.CFrame = settings.Origin * CFrame.new(0, -settings.ChunkSize/1.5, 0)
+		chunk.Size = Vector3.one * settings.ChunkSize/2
+
+		for propertyName, propertyValue in next, settings.ChunkProperties do
+			chunk[propertyName] = propertyValue
+		end
+
+		if chunkRaycast then
+			chunk.Color = chunkRaycast.Instance.Color
+			chunk.Material = chunkRaycast.Instance.Material
+		end
+
+		chunk.Anchored = true
+		chunk.CanCollide = false
+		chunk.Massless = true
+		chunk.Parent = workspace.ActiveStorage
+
+		game:GetService("TweenService"):Create(chunk, settings.TweenInfo, settings.TweenProperties or {
+			Size = Vector3.one * settings.ChunkSize,
+			CFrame = CFrame.new(chunkPartCFrame.Position + Vector3.new(0, settings.ChunkSize * settings.ChunkFloorYMultiplier, 0), settings.Origin.Position) 
+				* (settings.ChunkRandomRotation and CFrame.fromEulerAnglesXYZ(1 + math.random() * settings.ChunkRandomOrientationFactor, math.random() * settings.ChunkRandomOrientationFactor, math.random() * settings.ChunkRandomOrientationFactor) or CFrame.new())
+		}):Play()
+
+		if settings.ChunkFunction then
+			task.spawn(settings.ChunkFunction, chunk, chunkIndex, chunkRaycast)
+		end
+
+		table.insert(chunks, chunk)
+	end
+
+	self.RecentImpactSettings = settings
+	self.Chunks = chunks
+	return chunks
+end
+
+function ImpactCraters:ParallelCraters(
+	settings: {
+		Origin: CFrame, --[REQUIRED] The Root CFrame the Chunks will spawn at.
+		Distance: number, --[OPTIONAL] how far will the parallel craters go
+
+		Chunks: number, --[OPTIONAL] Number of Parts that will be spawned on the parallel
+		ChunkSize: number, --[OPTIONAL] Chunk Size. 
+		ChunkProperties: {}, --[OPTIONAL] Set properties of the chunks. Mainly used when RaycastParams is left nil.
+		ChunkFloorYMultiplier: number, --[OPTIONAL] If the chunk doesn't go down far enough you can multiply it.
+
+		ChunkRandomRotation: boolean, -- [OPTIONAL] Using pi it will rotate the chunk in absolute random orientations.
+		ChunkRandomOrientationFactor: number, -- [OPTIONAL] how much should it rotate in a random direction
+		ChunkInterval: number, --[OPTIONAL] leave 0 if instant else the chunks spawn at this tick rate
+
+		ChunkFunction: Function, --[OPTIONAL] a function that gets called everytime a chunk spawns and it's information passed through.
+
+		ParallelDistance: number, --[OPTIONAL] How far are both the lines are from each other
+		TweenInfo: TweenInfo, --[OPTIONAL] TweenInfo for the Chunk Tweening into Impact.
+
+		RaycastParams: RaycastParams, --[OPTIONAL] The RaycastParams used to determine the position of the chunks.
+		RaycastFloorAlignment: boolean --[OPTIONAL] Raycast downward to align with the floor.
+	}
+)if #self.Chunks > 0 then self:Debris() end
+	-- DEFAULT SETTINGS --
+	settings = MergeTable(settings, {
+		Distance = 70,
+
+		Chunks = 25,
+		ChunkSize = 3,
+		ChunkProperties = {},
+		ChunkFloorYMultiplier = 0,
+
+		ChunkRandomRotation = true,
+		ChunkRandomOrientationFactor = math.pi/10,
+		ChunkInterval = 0.05,
+
+		ParallelDistance = 3,
+		TweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Back),
+
+		RaycastParams = "DEFAULT-SETTINGS",
+		RaycastFloorAlignment = true
+	})
+
+	if settings.RaycastParams == "DEFAULT-SETTINGS" then
+		settings.RaycastParams = RaycastParams.new()
+
+		local filterDescendantsInstances = game:GetService("CollectionService"):GetTagged("Character")
+		table.insert(filterDescendantsInstances, workspace.ActiveStorage)
+
+		settings.RaycastParams.FilterDescendantsInstances = filterDescendantsInstances
+		settings.RaycastParams.FilterType = Enum.RaycastFilterType.Exclude
+	end
+
+	local chunks = {}
+	local targetCFrame = settings.Origin * CFrame.new(0, 0, -settings.Distance)
+	for chunkIndex = 1, settings.Chunks do
+		local biChunkCenter = settings.Origin:Lerp(targetCFrame, (chunkIndex - 1)/(settings.Chunks - 1))
+
+		for i = 0, 1 do
+			i = i == 0 and -1 or i
+			local chunkCFrame = biChunkCenter * CFrame.new(settings.ParallelDistance * i, 0, 0)
+			local chunkPosition = chunkCFrame.Position
+
+			local chunkRaycast
+			if settings.RaycastFloorAlignment and settings.RaycastParams then
+				chunkRaycast = workspace:Raycast(chunkCFrame.Position + Vector3.new(0, 2, 0), Vector3.new(0, -40, 0), settings.RaycastParams)
+				if chunkRaycast then
+					chunkPosition = chunkRaycast.Position
+				end
+			end
+
+			local chunk = Instance.new("Part")
+			chunk.Name = "Chunk"
+			chunk.Size = Vector3.one * settings.ChunkSize/2
+			chunk.CFrame = CFrame.lookAt((biChunkCenter * CFrame.new(i * 0.01, 0, 0)).Position, biChunkCenter.Position) * CFrame.new(0, -chunk.Size.Y, 0)
+
+			if chunkRaycast then
+				chunk.Color = chunkRaycast.Instance.Color
+				chunk.Material = chunkRaycast.Instance.Material
+			end
+
+			chunk.Anchored = true
+			chunk.CanCollide = false
+			chunk.Massless = true
+
+			chunk.Parent = workspace.ActiveStorage
+
+			for propertyName, propertyValue in next, settings.ChunkProperties do
+				chunk[propertyName] = propertyValue
+			end
+
+
+			game:GetService("TweenService"):Create(chunk, settings.TweenInfo, {
+				CFrame = CFrame.new(chunkPosition + Vector3.yAxis * settings.ChunkSize * settings.ChunkFloorYMultiplier, biChunkCenter.Position)
+					* (settings.ChunkRandomRotation and CFrame.fromEulerAnglesXYZ(1 + math.random() * settings.ChunkRandomOrientationFactor, math.random() * settings.ChunkRandomOrientationFactor, math.random() * settings.ChunkRandomOrientationFactor) or CFrame.new())
+			}):Play()
+
+			if settings.ChunkFunction then
+				task.spawn(settings.ChunkFunction, chunk, chunkIndex, chunkRaycast)
+			end
+
+			table.insert(chunks, chunk)
+		end
+
+		if settings.ChunkInterval > 0 then
+			task.wait(settings.ChunkInterval)
+		end
+	end
+
+	self.RecentImpactSettings = settings
+	self.Chunks = chunks
+end
+
+function ImpactCraters:Debris(
+	settings: {
+		TweenInfo: TweenInfo, --[OPTIONAL] TweenInfo for Debris.
+		TweenProperties: {}, --[OPTIONAL] Properties manually set to tween.
+		AdditionalDebrisTime: number, --[OPTIONAL] Adds more time before chunk destroys.
+
+		TowardOrigin: number, --[OPTIONAL] goes closer to the origin by alpha
+		DebrisInterval: number, --[OPTIONAL] leave 0 if instant else the debris destroys at this tick rate
+	}
+)
+	-- DEFAULT SETTINGS --
+	settings = MergeTable(settings, {
+		TweenInfo = TweenInfo.new(2, Enum.EasingStyle.Exponential, Enum.EasingDirection.InOut),
+		AdditionalDebrisTime = 0,
+
+		TowardOrigin = 0,
+		DebrisInterval = 0,
+	})
+	----------------------
+	for _, chunk: Part in next, self.Chunks do
+		game:GetService("TweenService"):Create(chunk, settings.TweenInfo, settings.TweenProperties or {
+			Size = chunk.Size/1.5,
+			Position = chunk.Position:Lerp(self.RecentImpactSettings.Origin.Position, settings.TowardOrigin) - Vector3.new(0, self.RecentImpactSettings.ChunkSize * (1 + self.RecentImpactSettings.ChunkFloorYMultiplier), 0),
+		}):Play()
+
+		game:GetService("Debris"):AddItem(chunk, settings.TweenInfo.Time + settings.AdditionalDebrisTime)
+
+		if settings.DebrisInterval > 0 then
+			task.wait(settings.DebrisInterval)
+		end
+	end
+
+	local chunkMemory = self.Chunks
+	self.Chunks = {}
+	return chunkMemory
+end
+
+return ImpactCraters]]></ProtectedString>
+        </Properties>
+    </Item>
+</roblox>
