@@ -1,0 +1,1435 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXPA6HRDHWN4DQ9C691XFM1UMEJ009AVWO">
+        <Properties>
+            <string name="Name">InteractiveCurves</string>
+            <string name="ScriptGuid">{b2368939-6d56-429d-ab2b-f11ae7a10c14}</string>
+            <ProtectedString name="Source"><![CDATA[local InteractiveCurves = {}
+
+InteractiveCurves.Bezier = require(script:WaitForChild("Bezier"))
+InteractiveCurves.Splines = require(script:WaitForChild("Splines"))
+
+return InteractiveCurves]]></ProtectedString>
+        </Properties>
+        <Item class="ModuleScript" referent="RBXA57UTQO6L4INV7EP5VG2MEZXO8R35W0F">
+            <Properties>
+                <string name="Name">Splines</string>
+                <string name="ScriptGuid">{ab480db8-54f3-407d-a527-1e19f66f8696}</string>
+                <ProtectedString name="Source"><![CDATA[local Splines = {}
+
+Splines.CatmullRom = require(script:WaitForChild("CatmullRom"))
+Splines.Hermite = require(script:WaitForChild("Hermite"))
+Splines.Linear = require(script:WaitForChild("Linear"))
+
+return Splines]]></ProtectedString>
+            </Properties>
+            <Item class="ModuleScript" referent="RBXEE52PD5LQ5AAXV3MKPNO8VQVJSQH06SX">
+                <Properties>
+                    <string name="Name">Hermite</string>
+                    <string name="ScriptGuid">{df0d3f79-33b3-4177-97f5-d36c10310ef2}</string>
+                    <ProtectedString name="Source"><![CDATA[local HermiteSpline = {}
+
+local tableRemove = table.remove
+local tableInsert = table.insert
+local tableClone = table.clone
+
+local mathFloor = math.floor
+local mathHuge = math.huge
+local mathATan2 = math.atan2
+
+local mathACos = math.acos
+
+function HermiteSpline.new(initialPositions: { Vector3 | Vector2 | number }, initialTangents: { Vector3 | Vector2 | number }, modifyDirectly: boolean)
+	local positions = initialPositions and (modifyDirectly and initialPositions or tableClone(initialPositions)) or { 0, 0 }
+	local tangents = initialTangents and (modifyDirectly and initialTangents or tableClone(initialTangents)) or {}
+
+	local self = setmetatable({
+		Positions = positions,
+		Tangents = tangents,
+		AutomaticallyUpdateTangents = true,
+		TSegmentLength = 0
+	}, { 
+		__index = HermiteSpline
+	})
+
+	self:UpdateTangents()
+	self:UpdateTSegmentLength()
+	return self
+end
+
+function HermiteSpline:GetPositionAtT(t: number)
+	self:UpdateSettings()
+
+	local tSegmentLength = self.TSegmentLength
+	local positions = self.Positions
+	local tangents = self.Tangents
+
+	local segmentIndex = mathFloor(t / tSegmentLength) + 1
+	if segmentIndex >= #positions then return positions[#positions] end
+
+	local localT = (t - (segmentIndex - 1) * tSegmentLength) / tSegmentLength
+
+	local p0 = positions[segmentIndex]
+	local p1 = positions[segmentIndex + 1]
+	local m0 = tangents[segmentIndex]
+	local m1 = tangents[segmentIndex + 1]
+
+	return self:Interpolate(p0, p1, m0, m1, localT)
+end
+
+function HermiteSpline:GetTangentAtT(t: number)
+	local epsilon = 0.001
+	local p1 = self:GetPositionAtT(t)
+	local p2 = self:GetPositionAtT(t + epsilon)
+	return (p2 - p1).Unit
+end
+
+function HermiteSpline:GetNormalAtT(t: number, up: Vector3)
+	local tangent = self:GetTangentAtT(t)
+	return tangent:Cross(up).Unit
+end
+
+function HermiteSpline:AddPoint(point: Vector3 | Vector2 | number, tangent: Vector3 | Vector2 | number)
+	local positions = self.Positions
+	local tangents = self.Tangents
+	tableInsert(positions, point)
+	tableInsert(tangents, tangent)
+	self:UpdateTSegmentLength()
+	self:UpdateSettings()
+end
+
+function HermiteSpline:RemovePoint(index: number)
+	tableRemove(self.Positions, index)
+	tableRemove(self.Tangents, index)
+	self:UpdateTSegmentLength()
+	self:UpdateSettings()
+end
+
+function HermiteSpline:MovePoint(index: number, newPosition: Vector3 | Vector2 | number, newTangent: Vector3 | Vector2 | number)
+	self.Positions[index] = newPosition
+	self.Tangents[index] = newTangent
+	self:UpdateTSegmentLength()
+	self:UpdateSettings()
+end
+
+function HermiteSpline:GetPoints()
+	return tableClone(self.Positions), tableClone(self.Tangents)
+end
+
+function HermiteSpline:UpdateTSegmentLength()
+	local tSegmentLength = 1 / (#self.Positions - 1)
+	self.TSegmentLength = tSegmentLength
+	return tSegmentLength
+end
+
+function HermiteSpline:Interpolate(p0: Vector3, p1: Vector3, m0: Vector3, m1: Vector3, t: number)
+	local t2 = t * t
+	local t3 = t2 * t
+
+	local h00 = 2 * t3 - 3 * t2 + 1
+	local h10 = t3 - 2 * t2 + t
+	local h01 = -2 * t3 + 3 * t2
+	local h11 = t3 - t2
+
+	return h00 * p0 + h10 * m0 + h01 * p1 + h11 * m1
+end
+
+function HermiteSpline:UpdateTangents()
+	local positions = self.Positions
+	local tangents = self.Tangents
+
+	for i = 1, #positions do
+		if i == 1 then
+			tangents[i] = positions[i + 1] - positions[i]
+		elseif i == #positions then
+			tangents[i] = positions[i] - positions[i - 1]
+		else
+			tangents[i] = (positions[i + 1] - positions[i - 1]) / 2
+		end
+	end
+end
+
+function HermiteSpline:UpdateSettings()
+	if self.AutomaticallyUpdateTangents then
+		self:UpdateTangents()
+	end
+end
+
+function HermiteSpline:GetLength()
+	local positions = self.Positions
+	local length = 0
+	for i = 1, #positions - 1 do
+		length = length + (positions[i + 1] - positions[i]).Magnitude
+	end
+	return length
+end
+
+function HermiteSpline:GetLengthBetween(t1: number, t2: number)
+	local length = 0
+	local tStep = 0.01
+	for t = t1, t2, tStep do
+		local p1 = self:GetPositionAtT(t)
+		local p2 = self:GetPositionAtT(t + tStep)
+		length = length + (p2 - p1).Magnitude
+	end
+	return length
+end
+
+function HermiteSpline:FindClosestPoint(point: Vector3)
+	local closestDistance = mathHuge
+	local closestT = 0
+	local tStep = 0.01
+	for t = 0, 1, tStep do
+		local p = self:GetPositionAtT(t)
+		local distance = (p - point).Magnitude
+		if distance < closestDistance then
+			closestDistance = distance
+			closestT = t
+		end
+	end
+	return closestT
+end
+
+function HermiteSpline:GetCurvatureAtT(t: number)
+	local epsilon = 0.001
+	local p1 = self:GetPositionAtT(t - epsilon)
+	local p2 = self:GetPositionAtT(t)
+	local p3 = self:GetPositionAtT(t + epsilon)
+	local v1 = p2 - p1
+	local v2 = p3 - p2
+	return (v2 - v1).Magnitude / epsilon
+end
+
+function HermiteSpline:GetSegmentLength(index: number)
+	local positions = self.Positions
+	if index < 1 or index >= #positions then return 0 end
+	return (positions[index + 1] - positions[index]).Magnitude
+end
+
+function HermiteSpline:GetTotalCurvature()
+	local curvature = 0
+	local tStep = 0.01
+	for t = 0, 1, tStep do
+		curvature = curvature + self:GetCurvatureAtT(t)
+	end
+	return curvature
+end
+
+function HermiteSpline:GetSpeedAtT(t: number)
+	local epsilon = 0.001
+	local p1 = self:GetPositionAtT(t - epsilon)
+	local p2 = self:GetPositionAtT(t + epsilon)
+	return (p2 - p1).Magnitude / (2 * epsilon)
+end
+
+function HermiteSpline:GetAccelerationAtT(t: number)
+	local epsilon = 0.001
+	local p1 = self:GetPositionAtT(t - epsilon)
+	local p2 = self:GetPositionAtT(t)
+	local p3 = self:GetPositionAtT(t + epsilon)
+	return ((p3 - p2) - (p2 - p1)).Magnitude / (epsilon^2)
+end
+
+function HermiteSpline:Subdivide(t: number)
+	local positions = self.Positions
+	local tangents = self.Tangents
+	local newPoint = self:GetPositionAtT(t)
+	local newTangent = self:GetTangentAtT(t)
+	tableInsert(positions, #positions, newPoint)
+	tableInsert(tangents, #tangents, newTangent)
+	self:UpdateTSegmentLength()
+	self:UpdateSettings()
+end
+
+function HermiteSpline:Simplify(threshold: number)
+	local positions = self.Positions
+	local tangents = self.Tangents
+	local newPositions = {positions[1]}
+	local newTangents = {tangents[1]}
+	for i = 2, #positions - 1 do
+		if (positions[i] - newPositions[#newPositions]).Magnitude > threshold then
+			tableInsert(newPositions, positions[i])
+			tableInsert(newTangents, tangents[i])
+		end
+	end
+	tableInsert(newPositions, positions[#positions])
+	tableInsert(newTangents, tangents[#tangents])
+	self.Positions = newPositions
+	self.Tangents = newTangents
+	self:UpdateTSegmentLength()
+	self:UpdateSettings()
+end
+
+function HermiteSpline:Reverse()
+	local positions = self.Positions
+	local tangents = self.Tangents
+
+	local reversedPositions = {}
+	local reversedTangents = {}
+	for i = #positions, 1, -1 do
+		tableInsert(reversedPositions, positions[i])
+		tableInsert(reversedTangents, tangents[i])
+	end
+	self.Positions = reversedPositions
+	self.Tangents = reversedTangents
+	self:UpdateTSegmentLength()
+	self:UpdateSettings()
+end
+
+function HermiteSpline:Scale(factor: number)
+	local positions = self.Positions
+
+	for i = 1, #positions do
+		positions[i] = positions[i] * factor
+	end
+	self:UpdateTSegmentLength()
+	self:UpdateSettings()
+end
+
+function HermiteSpline:Translate(offset: Vector3)
+	local positions = self.Positions
+	for i = 1, #positions do
+		positions[i] = positions[i] + offset
+	end
+	self:UpdateTSegmentLength()
+	self:UpdateSettings()
+end
+
+function HermiteSpline:Resample(numPoints: number)
+	local newPositions = {}
+	local tStep = 1 / (numPoints - 1)
+	for t = 0, 1, tStep do
+		tableInsert(newPositions, self:GetPositionAtT(t))
+	end
+	self.Positions = newPositions
+	self:UpdateTSegmentLength()
+	self:UpdateSettings()
+end
+
+function HermiteSpline:GetSegmentLengthByIndex(index: number)
+	local positions = self.Positions
+	if index < 1 or index >= #positions - 2 then
+		error("Index out of range")
+	end
+	return (positions[index + 1] - positions[index]).Magnitude
+end
+
+function HermiteSpline:GetPointIndex(point: Vector3)
+	local positions = self.Positions
+	for i = 1, #positions do
+		if positions[i] == point then return i end
+	end
+end
+
+function HermiteSpline:GetTotalAngleChange(alpha: number?)
+	local totalAngle = 0
+	local previousTangent = self:GetTangentAtT(0, alpha)
+	local tStep = 0.01
+	for t = tStep, 1, tStep do
+		local currentTangent = self:GetTangentAtT(t, alpha)
+		local angleChange = mathACos(previousTangent:Dot(currentTangent))
+		totalAngle = totalAngle + angleChange
+		previousTangent = currentTangent
+	end
+	return totalAngle
+end
+
+function HermiteSpline:GetDirectionAtT(t: number, alpha: number?)
+	local tangent = self:GetTangentAtT(t, alpha)
+	return tangent.Unit
+end
+
+function HermiteSpline:GetSegmentMidpoint(index: number)
+	local positions = self.Positions
+	if index < 1 or index >= #self.Positions - 2 then
+		error("Index out of range")
+	end
+
+	return (positions[index] + positions[index + 1]) / 2
+end
+
+function HermiteSpline:GetTAtDistance(distance: number, alpha: number?)
+	local length = 0
+	local tStep = 0.01
+	for t = 0, 1, tStep do
+		local p1 = self:GetPositionAtT(t, alpha)
+		local p2 = self:GetPositionAtT(t + tStep, alpha)
+		length = length + (p2 - p1).Magnitude
+		if length >= distance then
+			return t
+		end
+	end
+	return 1
+end
+
+function HermiteSpline:GetCurvatureAtSegment(index: number, alpha: number?)
+	if index < 1 or index >= #self.Positions - 2 then
+		error("Index out of range")
+	end
+
+	local t1 = (index - 1) * self.TSegmentLength
+	local t2 = index * self.TSegmentLength
+	return self:GetCurvatureAtT((t1 + t2) / 2, alpha)
+end
+
+function HermiteSpline:GetDistanceFromStartToPoint(point: Vector3, alpha: number?)
+	local t = self:FindClosestPoint(point, alpha)
+	return self:GetLengthBetween(0, t, alpha)
+end
+
+function HermiteSpline:GetAngleAtT(t: number, alpha: number?)
+	local tangent = self:GetTangentAtT(t, alpha)
+	return mathATan2(tangent.Y, tangent.X)
+end
+
+function HermiteSpline:Clone()
+	return HermiteSpline.new(self.Positions)
+end
+
+return HermiteSpline
+]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBXAW4C4ZX1O79BXULBXIRNXOJ5WFQK36JP">
+                <Properties>
+                    <string name="Name">CatmullRom</string>
+                    <string name="ScriptGuid">{18f70980-946c-44b9-92e7-a3cc9f9c8ad5}</string>
+                    <ProtectedString name="Source"><![CDATA[local CatmullRom = {}
+
+local tableRemove = table.remove
+local tableInsert = table.insert
+local tableClone = table.clone
+
+local mathFloor = math.floor
+local mathACos = math.acos
+local mathHuge = math.huge
+local mathATan2 = math.atan2
+
+function CatmullRom.new(initialPositions: { Vector3 | Vector2 | number }, modifyDirectly: boolean)
+	local positions = initialPositions and (modifyDirectly and initialPositions or tableClone(initialPositions)) or { 0, 0 }
+
+	do
+		local firstPosition = initialPositions[1]
+		tableInsert(positions, 1, firstPosition)
+		tableInsert(positions, firstPosition)
+	end
+
+	local self = setmetatable({
+		Positions = positions,
+		AutomaticallyUpdateControlPoints = true,
+		TSegmentLength = 0
+	}, { 
+		__index = CatmullRom
+	})
+
+	self:UpdateControlPointEnds()
+	self:UpdateTSegmentLength()
+	return self
+end
+
+function CatmullRom:GetPositionAtT(t: number, alpha: number?)
+	self:UpdateSettings()
+
+	local tSegmentLength = self.TSegmentLength
+	local positions = self.Positions
+
+	local segmentIndex = mathFloor(t / tSegmentLength) + 1
+	if segmentIndex == #positions - 2 then return positions[segmentIndex + 1] end
+
+	local localT = (t - (segmentIndex - 1) * tSegmentLength) / tSegmentLength
+
+	local p0 = positions[segmentIndex]
+	local p1 = positions[segmentIndex + 1]
+	local p2 = positions[segmentIndex + 2]
+	local p3 = positions[segmentIndex + 3]
+
+	return self:Interpolate(p0, p1, p2, p3, localT, alpha)
+end
+
+function CatmullRom:GetTangentAtT(t: number, alpha: number?)
+	local epsilon = 0.001
+	local p1 = self:GetPositionAtT(t, alpha)
+	local p2 = self:GetPositionAtT(t + epsilon, alpha)
+	return (p2 - p1).Unit
+end
+
+function CatmullRom:GetNormalAtT(t: number, up: Vector3, alpha: number?)
+	local tangent = self:GetTangentAtT(t, alpha)
+	return tangent:Cross(up).Unit
+end
+
+function CatmullRom:AddPoint(point: Vector3 | Vector2 | number)
+	local positions = self.Positions
+	tableInsert(positions, #positions - 1, point)
+	self:UpdateTSegmentLength()
+	self:UpdateControlPointEnds()
+end
+
+function CatmullRom:RemovePoint(index: number)
+	tableRemove(self.Positions, index + 1)
+	self:UpdateTSegmentLength()
+	self:UpdateControlPointEnds()
+end
+
+function CatmullRom:MovePoint(index: number, newPosition: Vector3 | Vector2 | number)
+	self.Positions[index + 1] = newPosition
+	self:UpdateTSegmentLength()
+	self:UpdateControlPointEnds()
+end
+
+function CatmullRom:GetPoints()
+	return tableClone(self.Positions)
+end
+
+function CatmullRom:UpdateTSegmentLength()
+	local tSegmentLength = 1 / (#self.Positions - 3)
+	self.TSegmentLength = tSegmentLength
+	return tSegmentLength
+end
+
+function CatmullRom:CalculateT(t: number, p0: Vector3, p1: Vector3, alpha: number?)
+	return t + (p1 - p0).Magnitude^(alpha or 0.5)
+end
+
+function CatmullRom:Interpolate(p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3, t: number, alpha: number?)
+	local t0 = 0
+	local t1 = self:CalculateT(t0, p0, p1, alpha)
+	local t2 = self:CalculateT(t1, p1, p2, alpha)
+	local t3 = self:CalculateT(t2, p2, p3, alpha)
+
+	t = t1 + (t2 - t1) * t
+
+	local tSubT0 = t - t0
+	local tSubT1 = t - t1
+
+	local A1 = p0 + (p1 - p0) * tSubT0 / (t1 - t0)
+	local A2 = p1 + (p2 - p1) * tSubT1 / (t2 - t1)
+	local A3 = p2 + (p3 - p2) * (t - t2) / (t3 - t2)
+
+	local B1 = A1 + (A2 - A1) * tSubT0 / (t2 - t0)
+	local B2 = A2 + (A3 - A2) * tSubT1 / (t3 - t1)
+
+	local C = B1 + (B2 - B1) * tSubT1 / (t2 - t1)
+
+	return C
+end
+
+function CatmullRom:UpdateControlPointEnds()
+	local positions = self.Positions
+
+	local firstPosition = positions[2]
+	local secondPosition = positions[3]
+
+	local numberOfPositions = #positions
+	local lastPosition = positions[numberOfPositions - 1]
+
+	positions[1] = firstPosition - (secondPosition - firstPosition)
+	positions[numberOfPositions] = lastPosition + (lastPosition - positions[numberOfPositions - 2])
+
+	return self
+end
+
+function CatmullRom:UpdateSettings()
+	if self.AutomaticallyUpdateControlPoints then
+		self:UpdateControlPointEnds()
+	end
+end
+
+function CatmullRom:GetLength()
+	local positions = self.Positions
+	local length = 0
+	for i = 2, #positions - 2 do
+		length = length + (positions[i + 1] - positions[i]).Magnitude
+	end
+	return length
+end
+
+function CatmullRom:GetLengthBetween(t1: number, t2: number, alpha: number?)
+	local length = 0
+	local tStep = 0.01
+	for t = t1, t2, tStep do
+		local p1 = self:GetPositionAtT(t, alpha)
+		local p2 = self:GetPositionAtT(t + tStep, alpha)
+		length = length + (p2 - p1).Magnitude
+	end
+	return length
+end
+
+function CatmullRom:FindClosestPoint(point: Vector3, alpha: number?)
+	local closestDistance = mathHuge
+	local closestT = 0
+	local tStep = 0.01
+	for t = 0, 1, tStep do
+		local p = self:GetPositionAtT(t, alpha)
+		local distance = (p - point).Magnitude
+		if distance < closestDistance then
+			closestDistance = distance
+			closestT = t
+		end
+	end
+	return closestT
+end
+
+function CatmullRom:GetCurvatureAtT(t: number, alpha: number?)
+	local epsilon = 0.001
+	local p1 = self:GetPositionAtT(t - epsilon, alpha)
+	local p2 = self:GetPositionAtT(t, alpha)
+	local p3 = self:GetPositionAtT(t + epsilon, alpha)
+	local v1 = p2 - p1
+	local v2 = p3 - p2
+	return (v2 - v1).Magnitude / epsilon
+end
+
+function CatmullRom:GetSegmentLength(index: number)
+	local positions = self.Positions
+	if index < 1 or index >= #positions - 2 then return 0 end
+	return (positions[index + 1] - positions[index]).Magnitude
+end
+
+function CatmullRom:GetTotalCurvature(alpha: number?)
+	local curvature = 0
+	local tStep = 0.01
+	for t = 0, 1, tStep do
+		curvature = curvature + self:GetCurvatureAtT(t, alpha)
+	end
+	return curvature
+end
+
+function CatmullRom:GetSpeedAtT(t: number, alpha: number?)
+	local epsilon = 0.001
+	local p1 = self:GetPositionAtT(t - epsilon, alpha)
+	local p2 = self:GetPositionAtT(t + epsilon, alpha)
+	return (p2 - p1).Magnitude / (2 * epsilon)
+end
+
+function CatmullRom:GetAccelerationAtT(t: number, alpha: number?)
+	local epsilon = 0.001
+	local p1 = self:GetPositionAtT(t - epsilon, alpha)
+	local p2 = self:GetPositionAtT(t, alpha)
+	local p3 = self:GetPositionAtT(t + epsilon, alpha)
+	return ((p3 - p2) - (p2 - p1)).Magnitude / (epsilon^2)
+end
+
+function CatmullRom:Subdivide(t: number, alpha: number?)
+	local positions = self.Positions
+	local newPoint = self:GetPositionAtT(t, alpha)
+	tableInsert(positions, #positions - 1, newPoint)
+	self:UpdateTSegmentLength()
+	self:UpdateControlPointEnds()
+end
+
+function CatmullRom:Simplify(threshold: number)
+	local positions = self.Positions
+	local newPositions = {positions[1]}
+	for i = 2, #positions - 1 do
+		if (positions[i] - newPositions[#newPositions]).Magnitude > threshold then
+			tableInsert(newPositions, positions[i])
+		end
+	end
+	tableInsert(newPositions, positions[#positions])
+	positions = newPositions
+	self:UpdateTSegmentLength()
+	self:UpdateControlPointEnds()
+end
+
+function CatmullRom:Reverse()
+	local positions = self.Positions
+	
+	local reversedPositions = {}
+	for i = #positions, 1, -1 do
+		tableInsert(reversedPositions, positions[i])
+	end
+	positions = reversedPositions
+	self:UpdateTSegmentLength()
+	self:UpdateControlPointEnds()
+end
+
+function CatmullRom:Scale(factor: number)
+	local positions = self.Positions
+	
+	for i = 2, #positions - 1 do
+		positions[i] = positions[i] * factor
+	end
+	self:UpdateTSegmentLength()
+	self:UpdateControlPointEnds()
+end
+
+function CatmullRom:Translate(offset: Vector3)
+	local positions = self.Positions
+	for i = 2, #positions - 1 do
+		positions[i] = positions[i] + offset
+	end
+	self:UpdateTSegmentLength()
+	self:UpdateControlPointEnds()
+end
+
+function CatmullRom:GetPointIndex(point: Vector3)
+	local positions = self.Positions
+	for i = 1, #positions do
+		if positions[i] == point then return i end
+	end
+end
+
+function CatmullRom:GetPointByIndex(index: number)
+	return self.Positions[index]
+end
+
+function CatmullRom:GetDistanceFromStartToPoint(point: Vector3, alpha: number?)
+	local t = self:FindClosestPoint(point, alpha)
+	return self:GetLengthBetween(0, t, alpha)
+end
+
+function CatmullRom:Resample(numPoints: number)
+	local newPositions = {}
+	local tStep = 1 / (numPoints - 1)
+	for t = 0, 1, tStep do
+		tableInsert(newPositions, self:GetPositionAtT(t))
+	end
+	self.Positions = newPositions
+	self:UpdateTSegmentLength()
+	self:UpdateControlPointEnds()
+end
+
+function CatmullRom:GetSegmentLengthByIndex(index: number)
+	local positions = self.Positions
+	if index < 1 or index >= #positions - 2 then
+		error("Index out of range")
+	end
+	return (positions[index + 1] - positions[index]).Magnitude
+end
+
+function CatmullRom:GetSegmentMidpoint(index: number)
+	local positions = self.Positions
+	if index < 1 or index >= #self.Positions - 2 then
+		error("Index out of range")
+	end
+	
+	return (positions[index] + positions[index + 1]) / 2
+end
+
+function CatmullRom:GetTAtDistance(distance: number, alpha: number?)
+	local length = 0
+	local tStep = 0.01
+	for t = 0, 1, tStep do
+		local p1 = self:GetPositionAtT(t, alpha)
+		local p2 = self:GetPositionAtT(t + tStep, alpha)
+		length = length + (p2 - p1).Magnitude
+		if length >= distance then
+			return t
+		end
+	end
+	return 1
+end
+
+function CatmullRom:GetDirectionAtT(t: number, alpha: number?)
+	local tangent = self:GetTangentAtT(t, alpha)
+	return tangent.Unit
+end
+
+function CatmullRom:GetCurvatureAtSegment(index: number, alpha: number?)
+	if index < 1 or index >= #self.Positions - 2 then
+		error("Index out of range")
+	end
+	
+	local t1 = (index - 1) * self.TSegmentLength
+	local t2 = index * self.TSegmentLength
+	return self:GetCurvatureAtT((t1 + t2) / 2, alpha)
+end
+
+function CatmullRom:GetPositionAfterDistance(startT: number, distance: number, alpha: number?)
+	local t = self:GetTAtDistance(distance, alpha)
+	return self:GetPositionAtT(startT + t, alpha)
+end
+
+function CatmullRom:GetTotalAngleChange(alpha: number?)
+	local totalAngle = 0
+	local previousTangent = self:GetTangentAtT(0, alpha)
+	local tStep = 0.01
+	for t = tStep, 1, tStep do
+		local currentTangent = self:GetTangentAtT(t, alpha)
+		local angleChange = mathACos(previousTangent:Dot(currentTangent))
+		totalAngle = totalAngle + angleChange
+		previousTangent = currentTangent
+	end
+	return totalAngle
+end
+
+function CatmullRom:GetSegmentIndexForPoint(point: Vector3)
+	local positions = self.Positions
+	for i = 1, #positions - 2 do
+		local p1 = positions[i]
+		local p2 = positions[i + 1]
+		if (point - p1).Magnitude + (point - p2).Magnitude <= (p2 - p1).Magnitude + 0.01 then
+			return i
+		end
+	end
+	return nil
+end
+
+function CatmullRom:GetAngleAtT(t: number, alpha: number?)
+	local tangent = self:GetTangentAtT(t, alpha)
+	return mathATan2(tangent.Y, tangent.X)
+end
+
+function CatmullRom:GetDistanceAtT(t: number, alpha: number?)
+	local distance = 0
+	local tStep = 0.01
+	for currentT = 0, t, tStep do
+		local p1 = self:GetPositionAtT(currentT, alpha)
+		local p2 = self:GetPositionAtT(currentT + tStep, alpha)
+		distance = distance + (p2 - p1).Magnitude
+	end
+	return distance
+end
+
+function CatmullRom:Clone()
+	local positions = tableClone(self.Positions)
+	tableRemove(positions, 1)
+	tableRemove(positions, #positions)
+	return CatmullRom.new(positions, true)
+end
+
+return CatmullRom
+]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBX64DRA5S9FF50T56SR2O492FP12PMN6V3">
+                <Properties>
+                    <string name="Name">Linear</string>
+                    <string name="ScriptGuid">{b7c01bb6-53f7-4392-a6ab-193e5098ddba}</string>
+                    <ProtectedString name="Source"><![CDATA[local LinearSpline = {}
+
+local tableInsert = table.insert
+local tableRemove = table.remove
+local tableClone = table.clone
+
+local mathFloor = math.floor
+local mathACos = math.acos
+local mathHuge = math.huge
+local mathATan2 = math.atan2
+local mathClamp = math.clamp
+
+function LinearSpline.new(initialPositions: { Vector3 | Vector2 | number }, modifyDirectly: boolean)
+	local positions = initialPositions and (modifyDirectly and initialPositions or tableClone(initialPositions)) or { 0, 0 }
+
+	local self = setmetatable({
+		Positions = positions,
+		TSegmentLength = 0
+	}, { 
+		__index = LinearSpline
+	})
+
+	self:UpdateTSegmentLength()
+	return self
+end
+
+function LinearSpline:GetPositionAtT(t: number)
+	self:UpdateTSegmentLength()
+
+	local tSegmentLength = self.TSegmentLength
+	local positions = self.Positions
+
+	t = mathClamp(t, 0, 1)
+
+	local segmentIndex = mathFloor(t / tSegmentLength) + 1
+	if segmentIndex >= #positions then return positions[#positions] end
+
+	local localT = (t - (segmentIndex - 1) * tSegmentLength) / tSegmentLength
+
+	local p0 = positions[segmentIndex]
+	local p1 = positions[segmentIndex + 1]
+
+	return p0 + (p1 - p0) * localT
+end
+
+
+function LinearSpline:GetTangentAtT(t: number)
+	local epsilon = 0.001
+	local p1 = self:GetPositionAtT(t)
+	local p2 = self:GetPositionAtT(t + epsilon)
+	return (p2 - p1).Unit
+end
+
+function LinearSpline:GetNormalAtT(t: number, up: Vector3)
+	local tangent = self:GetTangentAtT(t)
+	return tangent:Cross(up).Unit
+end
+
+function LinearSpline:AddPoint(point: Vector3 | Vector2 | number)
+	local positions = self.Positions
+	tableInsert(positions, #positions, point)
+	self:UpdateTSegmentLength()
+end
+
+function LinearSpline:RemovePoint(index: number)
+	tableRemove(self.Positions, index)
+	self:UpdateTSegmentLength()
+end
+
+function LinearSpline:MovePoint(index: number, newPosition: Vector3 | Vector2 | number)
+	self.Positions[index] = newPosition
+	self:UpdateTSegmentLength()
+end
+
+function LinearSpline:GetPoints()
+	return tableClone(self.Positions)
+end
+
+function LinearSpline:UpdateTSegmentLength()
+	local tSegmentLength = 1 / (#self.Positions - 1)
+	self.TSegmentLength = tSegmentLength
+	return tSegmentLength
+end
+
+function LinearSpline:GetLength()
+	local positions = self.Positions
+	local length = 0
+	for i = 1, #positions - 1 do
+		length = length + (positions[i + 1] - positions[i]).Magnitude
+	end
+	return length
+end
+
+function LinearSpline:GetLengthBetween(t1: number, t2: number)
+	local length = 0
+	local tStep = 0.01
+	for t = t1, t2, tStep do
+		local p1 = self:GetPositionAtT(t)
+		local p2 = self:GetPositionAtT(t + tStep)
+		length = length + (p2 - p1).Magnitude
+	end
+	return length
+end
+
+function LinearSpline:FindClosestPoint(point: Vector3)
+	local closestDistance = mathHuge
+	local closestT = 0
+	local tStep = 0.01
+	for t = 0, 1, tStep do
+		local p = self:GetPositionAtT(t)
+		local distance = (p - point).Magnitude
+		if distance < closestDistance then
+			closestDistance = distance
+			closestT = t
+		end
+	end
+	return closestT
+end
+
+function LinearSpline:GetCurvatureAtT(t: number)
+	return 0
+end
+
+function LinearSpline:GetSegmentLength(index: number)
+	local positions = self.Positions
+	if index < 1 or index >= #positions then return 0 end
+	return (positions[index + 1] - positions[index]).Magnitude
+end
+
+function LinearSpline:GetTotalCurvature()
+	return 0
+end
+
+function LinearSpline:GetSpeedAtT(t: number)
+	local epsilon = 0.001
+	local p1 = self:GetPositionAtT(t - epsilon)
+	local p2 = self:GetPositionAtT(t + epsilon)
+	return (p2 - p1).Magnitude / (2 * epsilon)
+end
+
+function LinearSpline:GetAccelerationAtT(t: number)
+	return 0
+end
+
+function LinearSpline:Subdivide(t: number)
+	local newPoint = self:GetPositionAtT(t)
+	tableInsert(self.Positions, #self.Positions, newPoint)
+	self:UpdateTSegmentLength()
+end
+
+function LinearSpline:Simplify(threshold: number)
+	local positions = self.Positions
+	local newPositions = {positions[1]}
+	for i = 2, #positions - 1 do
+		if (positions[i] - newPositions[#newPositions]).Magnitude > threshold then
+			tableInsert(newPositions, positions[i])
+		end
+	end
+	tableInsert(newPositions, positions[#positions])
+	self.Positions = newPositions
+	self:UpdateTSegmentLength()
+end
+
+function LinearSpline:Reverse()
+	local positions = self.Positions
+
+	local reversedPositions = {}
+	for i = #positions, 1, -1 do
+		tableInsert(reversedPositions, positions[i])
+	end
+	self.Positions = reversedPositions
+	self:UpdateTSegmentLength()
+end
+
+function LinearSpline:Scale(factor: number)
+	local positions = self.Positions
+
+	for i = 1, #positions do
+		positions[i] = positions[i] * factor
+	end
+	self:UpdateTSegmentLength()
+end
+
+function LinearSpline:Translate(offset: Vector3)
+	local positions = self.Positions
+	for i = 1, #positions do
+		positions[i] = positions[i] + offset
+	end
+	self:UpdateTSegmentLength()
+end
+
+function LinearSpline:GetPointIndex(point: Vector3)
+	local positions = self.Positions
+	for i = 1, #positions do
+		if positions[i] == point then return i end
+	end
+end
+
+function LinearSpline:GetPointByIndex(index: number)
+	return self.Positions[index]
+end
+
+function LinearSpline:GetDistanceFromStartToPoint(point: Vector3)
+	local t = self:FindClosestPoint(point)
+	return self:GetLengthBetween(0, t)
+end
+
+function LinearSpline:Resample(numPoints: number)
+	local newPositions = {}
+	local tStep = 1 / (numPoints - 1)
+	for t = 0, 1, tStep do
+		tableInsert(newPositions, self:GetPositionAtT(t))
+	end
+	self.Positions = newPositions
+	self:UpdateTSegmentLength()
+end
+
+function LinearSpline:GetSegmentLengthByIndex(index: number)
+	local positions = self.Positions
+	if index < 1 or index >= #positions then
+		error("Index out of range")
+	end
+	return (positions[index + 1] - positions[index]).Magnitude
+end
+
+function LinearSpline:GetSegmentMidpoint(index: number)
+	local positions = self.Positions
+	if index < 1 or index >= #positions then
+		error("Index out of range")
+	end
+
+	return (positions[index] + positions[index + 1]) / 2
+end
+
+function LinearSpline:GetTAtDistance(distance: number)
+	local length = 0
+	local tStep = 0.01
+	for t = 0, 1, tStep do
+		local p1 = self:GetPositionAtT(t)
+		local p2 = self:GetPositionAtT(t + tStep)
+		length = length + (p2 - p1).Magnitude
+		if length >= distance then
+			return t
+		end
+	end
+	return 1
+end
+
+function LinearSpline:GetDirectionAtT(t: number)
+	local tangent = self:GetTangentAtT(t)
+	return tangent.Unit
+end
+
+function LinearSpline:GetCurvatureAtSegment(index: number)
+	return 0
+end
+
+function LinearSpline:GetPositionAfterDistance(startT: number, distance: number)
+	local t = self:GetTAtDistance(distance)
+	return self:GetPositionAtT(startT + t)
+end
+
+function LinearSpline:GetTotalAngleChange()
+	local totalAngle = 0
+	local previousTangent = self:GetTangentAtT(0)
+	local tStep = 0.01
+	for t = tStep, 1, tStep do
+		local currentTangent = self:GetTangentAtT(t)
+		local angleChange = mathACos(previousTangent:Dot(currentTangent))
+		totalAngle = totalAngle + angleChange
+		previousTangent = currentTangent
+	end
+	return totalAngle
+end
+
+function LinearSpline:GetSegmentIndexForPoint(point: Vector3)
+	local positions = self.Positions
+	for i = 1, #positions - 1 do
+		local p1 = positions[i]
+		local p2 = positions[i + 1]
+		if (point - p1).Magnitude + (point - p2).Magnitude <= (p2 - p1).Magnitude + 0.01 then
+			return i
+		end
+	end
+	return nil
+end
+
+function LinearSpline:GetAngleAtT(t: number)
+	local tangent = self:GetTangentAtT(t)
+	return mathATan2(tangent.Y, tangent.X)
+end
+
+function LinearSpline:GetDistanceAtT(t: number)
+	local distance = 0
+	local tStep = 0.01
+	for t = 0, t, tStep do
+		local p1 = self:GetPositionAtT(t)
+		local p2 = self:GetPositionAtT(t + tStep)
+		distance = distance + (p2 - p1).Magnitude
+	end
+	return distance
+end
+
+function LinearSpline:Clone()
+	local newPositions = tableClone(self.Positions)
+	return LinearSpline.new(newPositions)
+end
+
+return LinearSpline
+]]></ProtectedString>
+                </Properties>
+            </Item>
+        </Item>
+        <Item class="ModuleScript" referent="RBXMJ5N80T56QQQYBCX2HGRUM0HKMD6K63W">
+            <Properties>
+                <string name="Name">Bezier</string>
+                <string name="ScriptGuid">{402319a6-216f-48a1-9050-1e85d4eb32a4}</string>
+                <ProtectedString name="Source"><![CDATA[local Bezier = {}
+
+local tableRemove = table.remove
+local tableInsert = table.insert
+local tableClone = table.clone
+
+local mathFloor = math.floor
+local mathACos = math.acos
+local mathHuge = math.huge
+local mathATan2 = math.atan2
+
+function Bezier.new(initialPositions: { Vector3 | Vector2 | number }, modifyDirectly: boolean)
+	local positions = initialPositions and (modifyDirectly and initialPositions or tableClone(initialPositions)) or { 0, 0 }
+
+	local self = setmetatable({
+		Positions = positions,
+		TSegmentLength = 0
+	}, { 
+		__index = Bezier
+	})
+
+	self:UpdateTSegmentLength()
+	return self
+end
+
+function Bezier:GetPositionAtT(t: number)
+	self:UpdateTSegmentLength()
+	
+	local positions = self.Positions
+	local n = #positions - 1
+
+	local point = self.Positions[1] * 0
+	for i = 0, n do
+		local binomialCoeff = self:BinomialCoefficient(n, i)
+		local bernsteinPoly = binomialCoeff * (t^i) * ((1 - t)^(n - i))
+		point = point + bernsteinPoly * positions[i + 1]
+	end
+
+	return point
+end
+
+function Bezier:GetTangentAtT(t: number)
+	local epsilon = 0.001
+	local p1 = self:GetPositionAtT(t)
+	local p2 = self:GetPositionAtT(t + epsilon)
+	return (p2 - p1).Unit
+end
+
+function Bezier:GetNormalAtT(t: number, up: Vector3)
+	local tangent = self:GetTangentAtT(t)
+	return tangent:Cross(up).Unit
+end
+
+function Bezier:AddPosition(point: Vector3 | Vector2 | number)
+	local positions = self.Positions
+	tableInsert(positions, point)
+	self:UpdateTSegmentLength()
+end
+
+function Bezier:RemovePosition(index: number)
+	tableRemove(self.Positions, index)
+	self:UpdateTSegmentLength()
+end
+
+function Bezier:MovePosition(index: number, newPosition: Vector3 | Vector2 | number)
+	self.Positions[index] = newPosition
+	self:UpdateTSegmentLength()
+end
+
+function Bezier:GetPositions()
+	return tableClone(self.Positions)
+end
+
+function Bezier:UpdateTSegmentLength()
+	local tSegmentLength = 1 / (#self.Positions - 1)
+	self.TSegmentLength = tSegmentLength
+	return tSegmentLength
+end
+
+function Bezier:BinomialCoefficient(n: number, k: number)
+	local coeff = 1
+	for i = 0, k - 1 do
+		coeff = coeff * (n - i) / (i + 1)
+	end
+	return coeff
+end
+
+function Bezier:GetLength()
+	local length = 0
+	local tStep = 0.01
+	for t = 0, 1, tStep do
+		local p1 = self:GetPositionAtT(t)
+		local p2 = self:GetPositionAtT(t + tStep)
+		length = length + (p2 - p1).Magnitude
+	end
+	return length
+end
+
+function Bezier:GetLengthBetween(t1: number, t2: number)
+	local length = 0
+	local tStep = 0.01
+	for t = t1, t2, tStep do
+		local p1 = self:GetPositionAtT(t)
+		local p2 = self:GetPositionAtT(t + tStep)
+		length = length + (p2 - p1).Magnitude
+	end
+	return length
+end
+
+function Bezier:FindClosestPoint(point: Vector3)
+	local closestDistance = mathHuge
+	local closestT = 0
+	local tStep = 0.01
+	for t = 0, 1, tStep do
+		local p = self:GetPositionAtT(t)
+		local distance = (p - point).Magnitude
+		if distance < closestDistance then
+			closestDistance = distance
+			closestT = t
+		end
+	end
+	return closestT
+end
+
+function Bezier:GetCurvatureAtT(t: number)
+	local epsilon = 0.001
+	local p1 = self:GetPositionAtT(t - epsilon)
+	local p2 = self:GetPositionAtT(t)
+	local p3 = self:GetPositionAtT(t + epsilon)
+	local v1 = p2 - p1
+	local v2 = p3 - p2
+	return (v2 - v1).Magnitude / epsilon
+end
+
+function Bezier:Subdivide(t: number)
+	local positions = self.Positions
+	local newPoint = self:GetPositionAtT(t)
+	tableInsert(positions, newPoint)
+	self:UpdateTSegmentLength()
+end
+
+function Bezier:Simplify(threshold: number)
+	local positions = self.Positions
+	local newPositions = {positions[1]}
+	for i = 2, #positions do
+		if (positions[i] - newPositions[#newPositions]).Magnitude > threshold then
+			tableInsert(newPositions, positions[i])
+		end
+	end
+	self.Positions = newPositions
+	self:UpdateTSegmentLength()
+end
+
+function Bezier:Reverse()
+	local positions = self.Positions
+
+	local reversedPositions = {}
+	for i = #positions, 1, -1 do
+		tableInsert(reversedPositions, positions[i])
+	end
+	self.Positions = reversedPositions
+	self:UpdateTSegmentLength()
+end
+
+function Bezier:Scale(factor: number)
+	local positions = self.Positions
+
+	for i = 1, #positions do
+		positions[i] = positions[i] * factor
+	end
+	self:UpdateTSegmentLength()
+end
+
+function Bezier:Translate(offset: Vector3)
+	local positions = self.Positions
+	for i = 1, #positions do
+		positions[i] = positions[i] + offset
+	end
+	self:UpdateTSegmentLength()
+end
+
+function Bezier:GetPointIndex(point: Vector3)
+	local positions = self.Positions
+	for i = 1, #positions do
+		if positions[i] == point then return i end
+	end
+end
+
+function Bezier:GetPointByIndex(index: number)
+	return self.Positions[index]
+end
+
+function Bezier:GetDistanceFromStartToPoint(point: Vector3)
+	local t = self:FindClosestPoint(point)
+	return self:GetLengthBetween(0, t)
+end
+
+function Bezier:Resample(numPoints: number)
+	local newPositions = {}
+	local tStep = 1 / (numPoints - 1)
+	for t = 0, 1, tStep do
+		tableInsert(newPositions, self:GetPositionAtT(t))
+	end
+	self.Positions = newPositions
+	self:UpdateTSegmentLength()
+end
+
+function Bezier:GetSegmentLengthByIndex(index: number)
+	local positions = self.Positions
+	if index < 1 or index >= #positions then
+		error("Index out of range")
+	end
+	return (positions[index + 1] - positions[index]).Magnitude
+end
+
+function Bezier:GetSegmentMidpoint(index: number)
+	local positions = self.Positions
+	if index < 1 or index >= #self.Positions then
+		error("Index out of range")
+	end
+
+	return (positions[index] + positions[index + 1]) / 2
+end
+
+function Bezier:GetTAtDistance(distance: number)
+	local length = 0
+	local tStep = 0.01
+	for t = 0, 1, tStep do
+		local p1 = self:GetPositionAtT(t)
+		local p2 = self:GetPositionAtT(t + tStep)
+		length = length + (p2 - p1).Magnitude
+		if length >= distance then
+			return t
+		end
+	end
+	return 1
+end
+
+function Bezier:GetDirectionAtT(t: number)
+	local tangent = self:GetTangentAtT(t)
+	return tangent.Unit
+end
+
+function Bezier:GetTotalCurvature()
+	local curvature = 0
+	local tStep = 0.01
+	for t = 0, 1, tStep do
+		curvature = curvature + self:GetCurvatureAtT(t)
+	end
+	return curvature
+end
+
+function Bezier:GetSpeedAtT(t: number)
+	local epsilon = 0.001
+	local p1 = self:GetPositionAtT(t - epsilon)
+	local p2 = self:GetPositionAtT(t + epsilon)
+	return (p2 - p1).Magnitude / (2 * epsilon)
+end
+
+function Bezier:GetAccelerationAtT(t: number)
+	local epsilon = 0.001
+	local p1 = self:GetPositionAtT(t - epsilon)
+	local p2 = self:GetPositionAtT(t)
+	local p3 = self:GetPositionAtT(t + epsilon)
+	return ((p3 - p2) - (p2 - p1)).Magnitude / (epsilon^2)
+end
+
+function Bezier:GetPositionAfterDistance(startT: number, distance: number)
+	local t = self:GetTAtDistance(distance)
+	return self:GetPositionAtT(startT + t)
+end
+
+function Bezier:GetTotalAngleChange()
+	local totalAngle = 0
+	local previousTangent = self:GetTangentAtT(0)
+	local tStep = 0.01
+	for t = tStep, 1, tStep do
+		local currentTangent = self:GetTangentAtT(t)
+		local angleChange = mathACos(previousTangent:Dot(currentTangent))
+		totalAngle = totalAngle + angleChange
+		previousTangent = currentTangent
+	end
+	return totalAngle
+end
+
+function Bezier:GetSegmentIndexForPoint(point: Vector3)
+	local positions = self.Positions
+	for i = 1, #positions - 1 do
+		local p1 = positions[i]
+		local p2 = positions[i + 1]
+		if (point - p1).Magnitude + (point - p2).Magnitude <= (p2 - p1).Magnitude + 0.01 then
+			return i
+		end
+	end
+	return nil
+end
+
+function Bezier:GetAngleAtT(t: number)
+	local tangent = self:GetTangentAtT(t)
+	return mathATan2(tangent.Y, tangent.X)
+end
+
+function Bezier:GetDistanceAtT(t: number)
+	local distance = 0
+	local tStep = 0.01
+	for currentT = 0, t, tStep do
+		local p1 = self:GetPositionAtT(currentT)
+		local p2 = self:GetPositionAtT(currentT + tStep)
+		distance = distance + (p2 - p1).Magnitude
+	end
+	return distance
+end
+
+return Bezier
+]]></ProtectedString>
+            </Properties>
+        </Item>
+    </Item>
+</roblox>
