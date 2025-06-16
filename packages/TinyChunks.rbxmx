@@ -1,0 +1,129 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXDHVHIAN8EY7LNF4SIB1ORU7X3E6HCUZ6">
+        <Properties>
+            <string name="Name">TinyChunks</string>
+            <string name="ScriptGuid">{d306239d-bf8c-4c26-97a7-723f147ee337}</string>
+            <ProtectedString name="Source"><![CDATA[local TinyChunks = {}
+
+if game:GetService("RunService"):IsServer() then
+	game:GetService("PhysicsService"):RegisterCollisionGroup("TinyChunks")
+	game:GetService("PhysicsService"):CollisionGroupSetCollidable("TinyChunks", "TinyChunks", false)
+end
+
+function TinyChunks.new()
+	local self = setmetatable({}, {__index = TinyChunks})
+	self.Chunks = {}
+	return self
+end
+
+function TinyChunks:ExplodeFromPoint(
+	settings: {
+		Origin: CFrame, --[REQUIRED] The Root CFrame the Chunks will spawn at.
+
+		Chunks: number, --[OPTIONAL] Number of Parts that will be spawned
+		ChunkSize: number, --[OPTIONAL] Chunk Size. 
+
+		ChunkExplosionDistanceX: number,
+		ChunkExplosionHeight: number,
+		ChunkProperties: {}, --[OPTIONAL] Set properties of the chunks. Mainly used when RaycastParams is left nil.
+		ChunkExplosionDistanceZ: number,
+
+		ChunkMaxAngularVelocity: number,
+
+		ChunkFunction: Function, --[OPTIONAL] a function that gets called everytime a chunk spawns and it's information passed through.
+
+		TweenInfo: TweenInfo, --[OPTIONAL] TweenInfo for the Chunk Tweening
+		RaycastParams: RaycastParams
+	}
+) if #self.Chunks > 0 then self:Debris() end
+	settings = shared.Modules.MergeTable(settings, {
+		Chunks = 10,	
+		ChunkSize = 0.7,
+
+		ChunkExplosionDistanceX = 25,
+		ChunkExplosionHeight = 40,
+		ChunkExplosionDistanceZ = 25,
+
+		ChunkMaxAngularVelocity = 5,
+
+		ChunkProperties = {},
+
+		TweenInfo = TweenInfo.new(1, Enum.EasingStyle.Exponential),
+		RaycastParams = "DEFAULT-SETTINGS",
+	})
+
+	if settings.RaycastParams == "DEFAULT-SETTINGS" then
+		settings.RaycastParams = RaycastParams.new()
+
+		local filterDescendantsInstances = game:GetService("CollectionService"):GetTagged("Character")
+		table.insert(filterDescendantsInstances, workspace.ActiveStorage)
+
+		settings.RaycastParams.FilterDescendantsInstances = filterDescendantsInstances
+		settings.RaycastParams.FilterType = Enum.RaycastFilterType.Exclude
+	end
+
+	local raycastResult = workspace:Raycast((settings.Origin * CFrame.new(0, 2, 0)).Position, -settings.Origin.UpVector * 40, settings.RaycastParams)
+	local chunks = {}
+	for i = 1, settings.Chunks do
+		local chunkPosition = raycastResult and raycastResult.Position or settings.Origin.Position
+		local tinyChunk = Instance.new("Part")
+		tinyChunk.Name = "TinyChunk"
+		tinyChunk.Position = chunkPosition
+		tinyChunk.Size = Vector3.one * settings.ChunkSize/10
+
+		for propertyName, propertyValue in next, settings.ChunkProperties do
+			tinyChunk[propertyName] = propertyValue
+		end
+
+		if raycastResult then
+			tinyChunk.Color = raycastResult.Instance.Color
+			tinyChunk.Material = raycastResult.Instance.Material	
+		end
+
+		tinyChunk.CanCollide = true
+		tinyChunk.Anchored = false
+		tinyChunk.Parent = workspace.ActiveStorage
+		tinyChunk.CollisionGroup = "TinyChunks"
+		tinyChunk.AssemblyLinearVelocity = 
+			settings.Origin.UpVector * settings.ChunkExplosionHeight + 
+			settings.Origin.LookVector * (math.random() * (settings.ChunkExplosionDistanceZ * 2) - settings.ChunkExplosionDistanceZ) + 
+			settings.Origin.RightVector * (math.random() * (settings.ChunkExplosionDistanceX * 2) - settings.ChunkExplosionDistanceX)
+
+		tinyChunk.AssemblyAngularVelocity = 
+			Vector3.new(
+				math.random() * settings.ChunkMaxAngularVelocity,
+				math.random() * settings.ChunkMaxAngularVelocity, 
+				math.random() * settings.ChunkMaxAngularVelocity
+			)
+
+		game:GetService("TweenService"):Create(tinyChunk, settings.TweenInfo, {
+			Size = Vector3.one * settings.ChunkSize
+		}):Play()
+
+		if settings.ChunkFunction then
+			task.spawn(settings.ChunkFunction, tinyChunk, i, raycastResult)
+		end
+
+		table.insert(chunks, tinyChunk)
+	end
+
+	self.RecentSettings = settings
+	self.Chunks = chunks	
+end
+
+function TinyChunks:Debris()
+	if #self.Chunks > 0 then
+		for _, tinyChunk in next, self.Chunks do
+			game:GetService("TweenService"):Create(tinyChunk, TweenInfo.new(1, Enum.EasingStyle.Exponential), {
+				Size = Vector3.zero
+			}):Play()
+			game:GetService("Debris"):AddItem(tinyChunk, 1)
+		end
+	end
+end
+
+return TinyChunks]]></ProtectedString>
+        </Properties>
+    </Item>
+</roblox>
