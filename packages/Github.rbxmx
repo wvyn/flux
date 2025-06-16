@@ -1,0 +1,280 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXEAKPZARHHDVDPWZMNY5X30HKO5X3Z25X">
+        <Properties>
+            <string name="Name">Github</string>
+            <string name="ScriptGuid">{55c61d09-1300-4bc2-9001-df157bc6b134}</string>
+            <ProtectedString name="Source"><![CDATA[local Responses_d = require("@self/Responses.d")
+
+local http = require("./http")
+
+local Github = {}
+local GithubMethods = {}
+
+function GithubMethods.DeleteFile(
+	self: Github,
+	options: {
+		User: string?,
+		Repository: string,
+		Path: string,
+
+		Message: string,
+		Branch: string,
+		SHA: string?
+	}
+): Responses_d.DeleteFile
+	return http.JSON:Decode(http:Request({
+		url = `{self.Host}/repos/{(options.User or self.User.login)}/{options.Repository}/contents/{options.Path}`,
+		method = "DELETE",
+		headers = self.Headers,
+		body = {
+			message = options.Message,
+			sha = options.SHA,
+			branch = options.Branch
+		}
+	}).Body)
+end
+
+function GithubMethods.UpdateFile(
+	self: Github,
+	options: {
+		User: string?,
+		Repository: string,
+		Path: string,
+		
+		Message: string,
+		Content: string,
+		Branch: string,
+		SHA: string?
+	}
+): Responses_d.UpdateFile
+	return http.JSON:Decode(http:Request({
+		url = `{self.Host}/repos/{(options.User or self.User.login)}/{options.Repository}/contents/{options.Path}`,
+		method = "PUT",
+		headers = self.Headers,
+		body = {
+			message = options.Message,
+			sha = options.SHA,
+			content = http.Encryption.Base64:Encode(options.Content),
+			branch = options.Branch
+		}
+	}).Body)
+end
+
+function GithubMethods.ReadFile(
+	self: Github,
+	options: {
+		User: string?,
+		Repository: string,
+		Branch: string,
+		Path: string
+	}
+): Responses_d.ReadFile
+	return http.JSON:Decode(http:Request({
+		url = `{self.Host}/repos/{(options.User or self.User.login)}/{options.Repository}/contents/{options.Path}`,
+		method = "GET",
+		headers = self.Headers
+	}).Body)
+end
+
+function GithubMethods.GetUser(self: Github): Responses_d.GetUser
+	local user: Responses_d.GetUser = http.JSON:Decode(http:Request({
+		url = `{self.Host}/user`,
+		method = "GET",
+		headers = self.Headers
+	}).Body)
+	self.User = user
+	return user
+end
+
+function GithubMethods.SetToken(self: Github, token: string)
+	local headers = {
+		Authorization = (token and `token {token}` or nil) :: string,
+		Accept = "application/vnd.github.v3+json"
+	}
+	
+	self.Headers = headers
+	self.Token = token
+	self.User = self:GetUser()
+	return headers
+end
+
+local accounts = {}
+function Github.new(
+	options: {
+		Host: string?,
+		Username: string?,
+		Authorization: string?
+	}
+)
+	local existingGithub = Github.get(options)
+	if existingGithub then return existingGithub end
+	
+	local github = setmetatable({		
+		Host = "https://api.github.com" or options.Host,
+		Token = options.Authorization
+	}, {
+		__index = GithubMethods
+	})
+	
+	github.Headers = github:SetToken(options.Authorization)
+	github.User = github:GetUser()
+	accounts[#accounts + 1] = github
+	return github
+end
+
+function Github.get(
+	options: {
+		Username: string?,
+		Authorization: string?
+	}
+): Github
+	for index, account in next, accounts do
+		if account.User.login and account.User.login == options.Username then
+			return account, index
+		elseif account.Token and account.Token == options.Authorization then
+			return account, index
+		end
+	end
+end
+
+export type Github = typeof(accounts[1])
+
+return Github]]></ProtectedString>
+        </Properties>
+        <Item class="ModuleScript" referent="RBX7LVX0SNE0LZEM5X73LDXHS23X109XISW">
+            <Properties>
+                <string name="Name">Responses.d</string>
+                <string name="ScriptGuid">{3a990854-7a16-49f9-a27c-cb054c7d29ec}</string>
+                <ProtectedString name="Source"><![CDATA[export type Commit = {
+	sha: string,
+	node_id: string,
+	url: string,
+	html_url: string,
+	author: {
+		date: string,
+		name: string,
+		email: string
+	},
+	committer: {
+		date: string,
+		name: string,
+		email: string
+	},
+	message: string,
+	tree: {
+		url: string,
+		sha: string
+	},
+	parents: {
+		{
+			url: string,
+			html_url: string,
+			sha: string
+		}
+	},
+	verification: {
+		verified: boolean,
+		reason: string,
+		signature: any,
+		payload: any,
+		verified_at: any
+	}
+}
+
+export type UpdateFile = {
+	content: {
+		name: string,
+		path: string,
+		sha: string,
+		size: number,
+		url: string,
+		html_url: string,
+		git_url: string,
+		download_url: string,
+		type: string,
+		_links: {
+			self: string,
+			git: string,
+			html: string
+		}
+	},
+	commit: Commit
+}
+
+export type ReadFile = {
+	type: string,
+	encoding: string,
+	size: number,
+	name: string,
+	path: string,
+	content: string,
+	sha: string,
+	url: string,
+	git_url: string,
+	html_url: string,
+	download_url: string,
+	_links: string,
+	git: string,
+	self: string,
+	html: string
+}
+
+export type DeleteFile = {
+	content: any,
+	commit: Commit
+}
+
+export type GetUser = {
+	login: string,
+	id: number,
+	node_id: string,
+	avatar_url: string,
+	gravatar_id: string,
+	url: string,
+	html_url: string,
+	followers_url: string,
+	following_url: string,
+	gists_url: string,
+	starred_url: string,
+	subscriptions_url: string,
+	organizations_url: string,
+	repos_url: string,
+	events_url: string,
+	received_events_url: string,
+	type: string,
+	site_admin: boolean,
+	name: string,
+	company: string,
+	blog: string,
+	location: string,
+	email: string,
+	hireable: boolean,
+	bio: string,
+	twitter_username: string,
+	public_repos: number,
+	public_gists: number,
+	followers: number,
+	following: number,
+	created_at: string,
+	updated_at: string,
+	private_gists: number,
+	total_private_repos: number,
+	owned_private_repos: number,
+	disk_usage: number,
+	collaborators: number,
+	two_factor_authentication: boolean,
+	plan: {
+		name: string,
+		space: number,
+		private_repos: number,
+		collaborators: number
+	}
+}
+
+
+return {}]]></ProtectedString>
+            </Properties>
+        </Item>
+    </Item>
+</roblox>
