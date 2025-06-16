@@ -1,9 +1,9 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
 <Meta name="ExplicitAutoJoints">true</Meta>
-<Item class="ModuleScript" referent="RBXWEMR6SREGJWV6INZPAKGA6O84IT1JQIS">
+<Item class="ModuleScript" referent="RBXFFE6AQ71P0POSZK9UHEDXA1Y1WR9JOCI">
 <Properties>
 <string name="Name">http</string>
-<string name="ScriptGuid">{c3ab19ca-fc36-44ee-8810-4cfab7b19ac0}</string>
+<string name="ScriptGuid">{fe6a3886-ff7c-4aed-b2dd-4a34b7785fcf}</string>
 <ProtectedString name="Source"><![CDATA[local httpService = game:GetService("HttpService")
 
 local http = { 
@@ -119,10 +119,10 @@ end
 
 return http]]></ProtectedString>
 </Properties>
-<Item class="ModuleScript" referent="RBXEAKWM9M43JFDZECU2YN4ASG0RYJ2BTEO">
+<Item class="ModuleScript" referent="RBXQSTI3DPWEQ4J46QHSSCLZBKU5Q09JSJB">
 <Properties>
 <string name="Name">Encryption</string>
-<string name="ScriptGuid">{1557325b-3db1-429f-9480-3f0949763207}</string>
+<string name="ScriptGuid">{5193a154-12a1-49b8-b564-5df4e67bf511}</string>
 <ProtectedString name="Source"><![CDATA[local Encryption = {
 	Base64 = {}
 }
@@ -200,10 +200,10 @@ end
 
 return Encryption]]></ProtectedString>
 </Properties>
-<Item class="ModuleScript" referent="RBXKFBCEKT3JVV1V4PUGMN4NCN5R65I3JHI">
+<Item class="ModuleScript" referent="RBXCC3Y4SGYVHL80LVG635WBHYX2CR2EHQA">
 <Properties>
 <string name="Name">RBXM</string>
-<string name="ScriptGuid">{391d8665-25cb-4857-9a08-5786fd117360}</string>
+<string name="ScriptGuid">{8308e5c7-8cf3-40bb-bb74-e20d311e3271}</string>
 <ProtectedString name="Source"><![CDATA[local httpService = game:GetService("HttpService")
 local scriptEditorService = game:GetService("ScriptEditorService")
 
@@ -347,10 +347,10 @@ end
 return RBXM]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBXT1IYHKGLIE17I5NWW4HZQRHWRQMTXQOW">
+<Item class="ModuleScript" referent="RBX8J1MZOF4MNJF08ODPTO50CE5VQP8LS6K">
 <Properties>
 <string name="Name">Signal</string>
-<string name="ScriptGuid">{de7edd8e-f679-468d-8b68-a2082c7c7b17}</string>
+<string name="ScriptGuid">{f44681af-7349-4238-8370-9282ff2c51e0}</string>
 <ProtectedString name="Source"><![CDATA[local SignalConstructor = {}
 local SignalMethods = {}
 
@@ -480,10 +480,10 @@ export type Signal = typeof(SignalConstructor.new())
 return SignalConstructor]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX9HDTC0LIGU9GLCNFXM7YRFNFLEB3JXU1">
+<Item class="ModuleScript" referent="RBXJQZZKTDU0NBKH09NN4J1P4J28VNGYT0F">
 <Properties>
 <string name="Name">Logs</string>
-<string name="ScriptGuid">{69c554a6-3839-47e6-9de8-3059d2f3a630}</string>
+<string name="ScriptGuid">{199aea3b-6214-46b2-b100-8bbe7f1d8adf}</string>
 <ProtectedString name="Source"><![CDATA[local Signal = require("./Signal")
 
 local Logs = {}
@@ -572,6 +572,153 @@ export type Logs = typeof(Logs.new())
 return Logs]]></ProtectedString>
 </Properties>
 </Item>
+</Item>
+<Item class="ModuleScript" referent="RBXNXM6EQ3WV29HNUA8Y89GORLVYMLKRSST">
+<Properties>
+<string name="Name">RBXM</string>
+<string name="ScriptGuid">{bf9fcb19-fa8c-4206-812a-ba5d7c106421}</string>
+<ProtectedString name="Source"><![CDATA[local httpService = game:GetService("HttpService")
+local scriptEditorService = game:GetService("ScriptEditorService")
+
+local RBXM = {}
+
+local function referent()
+	local chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	local result = ""
+	for i = 1, 32 do
+		local index = math.random(1, #chars)
+		result = result .. chars:sub(index, index)
+	end; return result
+end
+
+local function loopInstances(bufferArray: { string }, instances: { Instance })
+	for _, instance in next, instances do
+		bufferArray[#bufferArray + 1] = `<Item class="{instance.ClassName}" referent="RBX{referent()}">`
+		bufferArray[#bufferArray + 1] = `<Properties>`
+		bufferArray[#bufferArray + 1] = `<string name="Name">{instance.Name}</string>`
+		if instance:IsA("BaseScript") or instance:IsA("ModuleScript") then
+			bufferArray[#bufferArray + 1] = `<string name="ScriptGuid">{httpService:GenerateGUID()}</string>`
+			bufferArray[#bufferArray + 1] = `<ProtectedString name="Source"><![CDATA[` .. scriptEditorService:GetEditorSource(instance) .. `]]></ProtectedString>`
+		end
+		bufferArray[#bufferArray + 1] = `</Properties>`
+		loopInstances(bufferArray, instance:GetChildren())
+		bufferArray[#bufferArray + 1] = `</Item>`
+	end
+end
+
+function RBXM:GetXML(instances: { Instance })
+	local bufferArray = {
+		`<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">`,
+		`<Meta name="ExplicitAutoJoints">true</Meta>`,
+	}
+	
+	loopInstances(bufferArray, instances)
+	
+	bufferArray[#bufferArray + 1] = `</roblox>`
+	return table.concat(bufferArray, "\n")
+end
+
+export type RBXMInstance = {
+	ClassName: string,
+	Referent: string,
+	Name: string,
+	
+	Children: RBXMInstance,
+	Parent: RBXMInstance?,
+	
+	Source: string?,
+	ScriptGuid: string?
+}
+
+local function parseItem(xmlItem)
+	local instance = {}
+
+	local className, referent = xmlItem:match('<Item class="(.-)" referent="(.-)"')
+	if className then
+		instance.ClassName = className
+	end; if referent then
+		instance.Referent = referent
+	end
+
+	local name = xmlItem:match('<string name="Name">(.-)</string>')
+	if name then
+		instance.Name = name
+	end
+
+	if xmlItem:match('<string name="ScriptGuid">') then
+		instance.ScriptGuid = xmlItem:match('<string name="ScriptGuid">(.-)</string>')
+		local source = xmlItem:match('<ProtectedString name="Source"><!%[CDATA%[(.-)%]%]></ProtectedString>')
+		if source then
+			instance.Source = source
+		end
+	end
+
+	return instance
+end
+
+local function extractItems(xml: string)
+	local pointer = 1
+	local function nextTag()
+		return xml:find("<", pointer)
+	end
+
+	local function parseItem()
+		local class, referent = xml:match('<Item class="(.-)" referent="(.-)">', pointer)
+		local startTag = xml:find('<Item class="(.-)" referent="(.-)">', pointer)
+		if not startTag then return end
+
+		local instance = {
+			ClassName = class,
+			Referent = referent,
+		}
+
+		pointer = xml:find("<Properties>", startTag)
+		if not pointer then return end
+
+		local propClose = xml:find("</Properties>", pointer)
+		local propBlock = xml:sub(pointer, propClose + 12)
+		pointer = propClose + 13
+
+		instance.Name = propBlock:match('<string name="Name">(.-)</string>')
+		instance.ScriptGuid = propBlock:match('<string name="ScriptGuid">(.-)</string>')
+		instance.Source = propBlock:match('<ProtectedString name="Source"><!%[CDATA%[(.-)%]%]></ProtectedString>')
+
+		instance.Children = {}
+
+		while true do
+			local nextItemStart = xml:find("<Item", pointer)
+			local nextItemEnd = xml:find("</Item>", pointer)
+			if not nextItemStart or nextItemEnd < nextItemStart then
+				pointer = nextItemEnd and (nextItemEnd + 7) or pointer
+				break
+			end
+
+			local child = parseItem()
+			if child then
+				child.Parent = instance
+				instance.Children[#instance.Children + 1] = child
+			end
+		end
+
+		return instance
+	end
+
+	local results = {}
+	while pointer < #xml do
+		local i = parseItem()
+		if i then results[#results + 1] = i; for _, v in next, i.Children do results[#results + 1] = v end else break end
+	end
+	
+	return results
+end
+
+function RBXM:GetInstances(content: string): { RBXMInstance }
+	return extractItems(content)
+end
+
+
+return RBXM]]></ProtectedString>
+</Properties>
 </Item>
 </Item>
 </roblox>
