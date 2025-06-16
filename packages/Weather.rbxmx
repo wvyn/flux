@@ -1,0 +1,169 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXWOAYDTBC62EWQYUVECQ8D9KHKQ8FUR6U">
+        <Properties>
+            <string name="Name">Weather</string>
+            <string name="ScriptGuid">{ccbd7fdc-5d68-4541-9837-11ca9172fe62}</string>
+            <ProtectedString name="Source"><![CDATA[local replicatedStorage = game:GetService("ReplicatedStorage")
+local lighting = game:GetService("Lighting")
+
+local assets = replicatedStorage.Assets
+local weatherEffects = assets.WeatherEffects
+
+local Weather = {}
+Weather.Weather = "None"
+Weather.WeatherSettings = require(script.WeatherSettings)
+Weather.LightingEffects = {}
+Weather.WeatherFolder = nil
+Weather.FollowPivot = nil
+Weather.RootPart = nil
+Weather.Footsteps = nil
+
+local fogCover = assets.FogCover:Clone()
+fogCover.Parent = workspace.Terrain
+
+function Weather.setRootPart( RootPart: BasePart )
+	Weather.RootPart = RootPart
+end
+
+function Weather.setWeather( newWeather: string | Folder )
+	for _, v in next, Weather.LightingEffects do
+		v:Destroy()
+	end; table.clear(Weather.LightingEffects)
+	
+	local weatherFolder = weatherEffects[newWeather]
+	local weatherSettings = Weather.WeatherSettings[newWeather]
+	
+	Weather.Weather = newWeather
+	Weather.WeatherFolder = weatherFolder
+	
+	for _, v: Instance in next, weatherFolder:GetChildren() do
+		if v:IsA("PostEffect") or v:IsA("Sky") or v:IsA("Atmosphere") then
+			local postEffect = v:Clone()
+			postEffect.Parent = lighting
+			table.insert(Weather.LightingEffects, postEffect)
+		elseif v:IsA("Sound") then
+			local effect = v:Clone()
+			effect.Name = "WeatherAmbience"
+			effect.Parent = game:GetService("SoundService")
+			effect:Play()
+			table.insert(Weather.LightingEffects, effect)
+		end
+	end
+	
+	if weatherFolder:FindFirstChild("FollowPivot") then
+		Weather.FollowPivot = weatherFolder.FollowPivot:Clone()
+		Weather.FollowPivot.Name = "WeatherEffect"
+		Weather.FollowPivot.Parent = workspace.Terrain
+		table.insert(Weather.LightingEffects, Weather.FollowPivot)
+	end
+	
+	Weather.Footsteps = weatherSettings.Footsteps
+	for i, v in next, weatherSettings do
+		if i == "FogCoverTransparency" then 
+			fogCover.Transparency = v 
+			continue
+		elseif i == "AmbientReverb" then
+			game:GetService("SoundService")[i] = v
+			continue
+		elseif i == "Footsteps" then
+			continue
+		end
+		game:GetService("TweenService"):Create(lighting, TweenInfo.new(1, Enum.EasingStyle.Exponential), {
+			[i] = v
+		}):Play()
+	end
+end
+
+function Weather.update()
+	local rootPart = Weather.RootPart
+	fogCover.Position = rootPart.Position
+	
+	if Weather.FollowPivot then
+		local raycastParams = RaycastParams.new()
+		raycastParams.FilterDescendantsInstances = game:GetService("CollectionService"):GetTagged("Character")
+		raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+		local raycastResult = workspace:Raycast(rootPart.Position, -Vector3.yAxis * 10, raycastParams)
+		if raycastResult then
+			Weather.FollowPivot:PivotTo(CFrame.new(raycastResult.Position))
+		end
+	end
+end
+
+return Weather]]></ProtectedString>
+        </Properties>
+        <Item class="ModuleScript" referent="RBXAOCSZEDP3JLXV70S6N8GY5OQ10EUU9HX">
+            <Properties>
+                <string name="Name">WeatherSettings</string>
+                <string name="ScriptGuid">{873d41ae-46b3-4f77-820b-87b71981c6fe}</string>
+                <ProtectedString name="Source"><![CDATA[return {
+	Blizzard = {
+		FogCoverTransparency = 0,
+		AmbientReverb = Enum.ReverbType.Cave,
+
+		Ambient = Color3.fromRGB(100, 154, 166),
+		Brightness = 3,
+
+		ColorShift_Bottom = Color3.fromRGB(0, 0, 0),
+		ColorShift_Top = Color3.fromRGB(0, 0, 0),
+
+		ExposureCompensation = 0,
+
+		EnvironmentDiffuseScale = 0.7,
+		EnvironmentSpecularScale = 0.3,
+
+		OutdoorAmbient = Color3.fromRGB(53, 194, 255),
+
+		FogColor = Color3.fromRGB(210, 230, 255),
+		FogEnd = 150,
+		FogStart = 0,
+		
+		Footsteps = { Sand = "Snow" }
+	},
+	Storm = {
+		FogCoverTransparency = 0.01,
+		AmbientReverb = Enum.ReverbType.Cave,
+
+		Ambient = Color3.fromRGB(70, 70, 70),
+		Brightness = 1,
+
+		ColorShift_Bottom = Color3.fromRGB(0, 0, 0),
+		ColorShift_Top = Color3.fromRGB(0, 0, 0),
+
+		ExposureCompensation = -0.4,
+
+		EnvironmentDiffuseScale = 0.2,
+		EnvironmentSpecularScale = 0.2,
+
+		OutdoorAmbient = Color3.fromRGB(120, 171, 202),
+
+		FogColor = Color3.fromRGB(87, 123, 135),
+		FogEnd = 180,
+		FogStart = 0
+	},
+	Rain = {
+		FogCoverTransparency = 0.01,
+		AmbientReverb = Enum.ReverbType.Cave,
+
+		Ambient = Color3.fromRGB(70, 70, 70),
+		Brightness = 2,
+
+		ColorShift_Bottom = Color3.fromRGB(0, 0, 0),
+		ColorShift_Top = Color3.fromRGB(0, 0, 0),
+
+		ExposureCompensation = -0.4,
+
+		EnvironmentDiffuseScale = 0.2,
+		EnvironmentSpecularScale = 0.2,
+
+		OutdoorAmbient = Color3.fromRGB(20, 185, 255),
+
+		FogColor = Color3.fromRGB(164, 231, 255),
+		FogEnd = 350,
+		FogStart = 0
+	},
+}]]></ProtectedString>
+            </Properties>
+        </Item>
+    </Item>
+</roblox>
