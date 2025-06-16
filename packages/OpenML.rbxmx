@@ -1,0 +1,1983 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBX5R3FALDTIBWUS1D4VCJ3T5WV1UOW61F9">
+        <Properties>
+            <string name="Name">OpenML</string>
+            <string name="ScriptGuid">{09897f71-92da-4f12-8f2a-bb7d59a305e3}</string>
+            <ProtectedString name="Source"><![CDATA[--[[
+OpenML Version 1.2.3
+
+- Fixed ReplayBuffer not using BatchSize
+- Added Clone Networks to Genetic [Genetic.Clone(network) or Network:Clone() -- you can do this if you applied metamethods]
+- Fixed Genetic Blend Function
+- Fixed Genetic Mutate Function
+- Removed Propagator from DQL
+- Added Native Code to Propagator: BackPropagation, ForwardPropagation
+- Added Native Code to CNN, ForwardPropagation
+- Added ObjectWrapper
+]]
+
+--[[
+TODO:
+- Update Documentation for Genetic
+- Possibly make it so DQL:Learn ActionRewards parameter isn't { action, reward } and instead [action] = reward
+
+- Add PPO
+- Create PPO Demo
+- Add Tabular Q-Learning
+- Fix CNN
+- Add RNN
+- Add LSTM
+- Add IQN
+- Add Actor Critic
+]]
+
+local OpenML = {}
+OpenML.Version = "1.2.3"
+
+local Resources = script.Resources
+OpenML.Resources = {
+	MLP = require(Resources.MLP),
+	CNN = require(Resources.CNN),
+	
+	ReplayBuffer = require(Resources.ReplayBuffer),
+	ObjectWrapper = require(Resources.ObjectWrapper)
+}
+
+local Algorithms = script.Algorithms
+OpenML.Algorithms = {
+	Propagator = require(Algorithms.Propagator),
+	Genetic = require(Algorithms.Genetic),
+	
+	-- Value-Based --
+	DQL = require(Algorithms.DQL),
+	
+	-- Policy-Based --
+	
+}
+
+local Optimizers = script.Optimizers
+OpenML.Optimizers = {
+	Adam = require(Optimizers.Adam),
+	Momentum = require(Optimizers.Momentum),
+	SGD = require(Optimizers.SGD)
+}
+
+local Calculate = script.Calculate
+OpenML.Calculate = {
+	MSE = require(Calculate.MSE),
+	DiscountRewards = require(Calculate.DiscountRewards),
+	GetHighestActionValue = require(Calculate.GetHighestActionValue),
+}
+
+local Encoders = script.Encoders
+OpenML.Encoders = {
+	OneHot = require(Encoders.OneHot)
+}
+
+local ActivationFunctions = script.ActivationFunctions
+OpenML.ActivationFunctions = {
+	Linear = require(ActivationFunctions.Linear),
+	
+	ELU = require(ActivationFunctions.ELU),
+	ReLU = require(ActivationFunctions.ReLU),
+	SELU = require(ActivationFunctions.SELU),
+	GELU = require(ActivationFunctions.GELU),
+	LeakyReLU = require(ActivationFunctions.LeakyReLU),
+	ThresholdReLU = require(ActivationFunctions.ThresholdReLU),
+	
+	ISRU = require(ActivationFunctions.ISRU),
+	
+	Sigmoid = require(ActivationFunctions.Sigmoid),
+	LogSigmoid = require(ActivationFunctions.LogSigmoid),
+	HardSigmoid = require(ActivationFunctions.HardSigmoid),
+	BipolarSigmoid = require(ActivationFunctions.BipolarSigmoid),
+	
+	BentIdentity = require(ActivationFunctions.BentIdentity),
+	
+	Logit = require(ActivationFunctions.Logit),
+	
+	TanH = require(ActivationFunctions.TanH),
+	HardTanH = require(ActivationFunctions.HardTanH),
+	
+	Swish = require(ActivationFunctions.Swish),
+	HardSwish = require(ActivationFunctions.HardSwish),
+	
+	Gaussian = require(ActivationFunctions.Gaussian),
+	
+	Softmax = require(ActivationFunctions.Softmax),
+	Softplus = require(ActivationFunctions.Softplus),
+	Softsign = require(ActivationFunctions.Softsign),
+	SoftShrink = require(ActivationFunctions.SoftShrink),
+	
+	BinaryStep = require(ActivationFunctions.BinaryStep)
+}
+
+return OpenML]]></ProtectedString>
+        </Properties>
+        <Item class="Folder" referent="RBXGJY7FEA4KRJ5YBY0PYDAZUNRXIGFB1OB">
+            <Properties>
+                <string name="Name">Algorithms</string>
+            </Properties>
+            <Item class="ModuleScript" referent="RBX9PEHQQO3HJRV1B8TS3CRQX5QXJSCGJ6P">
+                <Properties>
+                    <string name="Name">Genetic</string>
+                    <string name="ScriptGuid">{fa2c61d8-0817-4ef7-b4d9-1a6707b2320d}</string>
+                    <ProtectedString name="Source"><![CDATA[local Genetic = {}
+
+function Genetic:Blend(targetNetwork, percentage: number)
+	local startNetwork = self
+	
+	assert(startNetwork and targetNetwork, "Both networks must be provided for mutation.")
+	assert(percentage >= 0 and percentage <= 1, "Percentage must be between 0 and 1.")
+
+	local inversePercent = 1 - percentage
+
+	local startNetworkWeights = startNetwork.Weights
+	local targetNetworkWeights = targetNetwork.Weights
+
+	local newWeights = {}
+	for layer = 1, #startNetworkWeights do
+		local layerWeights = {}
+		
+		local startNetworkLayerWeights = startNetworkWeights[layer]
+		local targetNetworkLayerWeights = targetNetworkWeights[layer]
+		
+		for i = 1, #startNetworkLayerWeights do
+			local startNetworkWeightNode = startNetworkLayerWeights[i]
+			local targetNetworkWeightNode = targetNetworkLayerWeights[i]
+			
+			local weightNode = {}
+			for j = 1, #startNetworkLayerWeights[i] do
+				weightNode[j] = startNetworkWeightNode[j] * inversePercent + targetNetworkWeightNode[j] * percentage
+			end
+			
+			layerWeights[i] = weightNode
+		end
+		
+		newWeights[layer] = layerWeights
+	end
+	
+	local startNetworkNodes = startNetwork.Nodes
+	local targetNetworkNodes = targetNetwork.Nodes
+	
+	local newNodes = {}
+	for layer = 1, #startNetworkNodes do
+		local startNetworkLayer = startNetworkNodes[layer]
+		local targetNetworkLayer = targetNetworkNodes[layer]
+		
+		local nodeLayer = {}
+		for i = 1, #startNetworkLayer do
+			nodeLayer[i] = startNetworkLayer[i] * inversePercent + targetNetworkLayer[i] * percentage
+		end
+		
+		newNodes[layer] = nodeLayer
+	end
+
+	return {
+		Nodes = newNodes,
+		Weights = newWeights,
+		Format = startNetwork.Format
+	}
+end
+
+local mathRandom = math.random
+function Genetic:Mutate(targetNetwork, mutationRate: number)
+	local startNetwork = self
+	
+	mutationRate = mutationRate or 0.3
+	
+	assert(startNetwork and targetNetwork, "Both networks must be provided for mutation.")
+	assert(mutationRate >= 0 and mutationRate <= 1, "Mutation rate must be between 0 and 1.")
+
+	local startNetworkWeights = startNetwork.Weights
+	local targetNetworkWeights = targetNetwork.Weights
+
+	local newWeights = {}
+	for layer = 1, #startNetworkWeights do
+		local startNetworkWeightLayer = startNetworkWeights[layer]
+		local targetNetworkWeightLayer = targetNetworkWeights[layer]
+		
+		local weightLayer = {}
+		for i = 1, #startNetworkWeightLayer do
+			local startNetworkWeightNode = startNetworkWeightLayer[i]
+			local targetNetworkWeightNode = targetNetworkWeightLayer[i]
+			
+			local weightNode = {}
+			for j = 1, #startNetworkWeightLayer[i] do
+				local chosenWeight = mathRandom() > mutationRate and targetNetworkWeightNode[j] or startNetworkWeightNode[j]
+				weightNode[j] = chosenWeight
+			end
+			
+			weightLayer[i] = weightNode
+		end
+		
+		newWeights[layer] = weightLayer
+	end
+	
+	local startNetworkNodes = startNetwork.Nodes
+	local targetNetworkNodes = targetNetwork.Nodes
+
+	local newNodes = {}
+	for layer = 1, #startNetworkNodes do
+		local startNetworkLayer = startNetworkNodes[layer]
+		local targetNetworkLayer = targetNetworkNodes[layer]
+		
+		local nodeLayer = {}
+		for i = 1, #startNetworkLayer do
+			local chosenNode = mathRandom() > mutationRate and targetNetworkLayer[i] or startNetworkLayer[i]
+			nodeLayer[i] = chosenNode
+		end
+		
+		newNodes[layer] = nodeLayer
+	end
+
+	return {
+		Nodes = newNodes,
+		Weights = newWeights,
+		Format = startNetwork.Format
+	}
+end
+
+local function deepCopy(original)
+	local copy = {}
+	for k, v in pairs(original) do
+		if type(v) == "table" then
+			v = deepCopy(v)
+		end
+		copy[k] = v
+	end
+	return copy
+end
+
+function Genetic:Clone()
+	local startNetwork = self
+	
+	return deepCopy(startNetwork)
+end
+
+return Genetic]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBXMALFOUPU74D9UXC6RUQKNHHOBH6HHLRN">
+                <Properties>
+                    <string name="Name">Propagator</string>
+                    <string name="ScriptGuid">{c11db039-4933-4eee-8269-b6d17bb5d703}</string>
+                    <ProtectedString name="Source"><![CDATA[--!native
+
+local Propagator = {}
+
+@native
+function Propagator:ForwardPropagation(
+	input: { number },
+	activationFunction: { Activation: (layer: number, x: number) -> number } | (layer: number) -> { Activation: (layer: number, x: number) -> number }
+)
+	assert(activationFunction, "No activation function was given.")
+	assert(activationFunction, "No input was given.")
+	
+	local isActivationFunction = typeof(activationFunction) == "function"
+	
+	if self.Format == "MLP" then
+		local activations = { input }
+		
+		local weights = self.Weights
+		local nodes = self.Nodes
+		for layer: number = 2, #nodes do
+			local layerNodes: { number } = nodes[layer]
+			local lastLayerWeights = weights[layer - 1]
+			
+			local layerActivation = {}
+			for nodeIndex: number, nodeValue: number in next, layerNodes do
+				local weightedSummation = 0
+
+				local recentActivations = activations[#activations]
+				for activationIndex = 1, #recentActivations do
+					local activationValue: number = recentActivations[activationIndex]
+					weightedSummation += activationValue * lastLayerWeights[activationIndex][nodeIndex]
+				end
+
+				layerActivation[nodeIndex] = (isActivationFunction and activationFunction(layer) or activationFunction).Activation(layer, weightedSummation + nodeValue)
+			end
+			activations[#activations + 1] = layerActivation
+		end
+		
+		return activations
+	end
+end
+
+@native
+function Propagator:BackPropagation(
+	activations: {}, expectedOutput: {}?,
+	settings: {
+		ActivationFunction: { Derivative: (layer: number, x: number) -> number } | (layer: number, x: number) -> { Derivative: (layer: number, x: number) -> number },
+		LearningRate: number,
+		
+		Optimizer: { Optimize: (weights: { { number } }, deltas: { { number } }, activations: { { number } }, learningRate: number) -> ({}, {}, {}) }?,
+		LossFunction: (predictedOutput: { number }, expectedOutput: { number }) -> { number }?
+	}
+)
+	local activationFunction = settings.ActivationFunction
+	local lossFunction = settings.LossFunction
+	local learningRate = settings.LearningRate
+	local optimizer = settings.Optimizer
+	local weights = self.Weights
+
+	local isActivationFunction = typeof(activationFunction) == "function"
+
+	local outputError
+	local outputLayerIndex = #activations
+	local outputActivations = activations[outputLayerIndex]
+	
+	if lossFunction then
+		outputError = lossFunction(outputActivations, expectedOutput)
+	else
+		outputError = {}
+		for i = 1, #expectedOutput do
+			outputError[i] = expectedOutput[i] - outputActivations[i]
+		end
+	end
+
+	local deltas = {}
+	local outputLayerDelta = {}
+	for i = 1, #outputError do
+		outputLayerDelta[i] = outputError[i] * (isActivationFunction and activationFunction(outputLayerIndex) or activationFunction).Derivative(outputLayerIndex, outputActivations[i])
+	end
+	
+	deltas[outputLayerIndex] = outputLayerDelta
+
+	for layer = outputLayerIndex - 1, 1, -1 do
+		local deltaLayer = {}
+		
+		local layerWeights = weights[layer]
+		local layerActivation = activations[layer]
+		
+		local deltaNextLayer = deltas[layer + 1]
+		
+		for i = 1, #layerActivation do
+			local activationNode = layerActivation[i]
+			local weightNode = layerWeights[i]
+			
+			local errorSum = 0
+			for j = 1, #weightNode do
+				errorSum = errorSum + deltaNextLayer[j] * weightNode[j]
+			end
+			
+			deltaLayer[i] = errorSum * (isActivationFunction and activationFunction(layer) or activationFunction).Derivative(layer, activationNode)
+		end
+		
+		deltas[layer] = deltaLayer
+	end
+
+	if optimizer then
+		optimizer:Optimize(weights, deltas, activations, learningRate)
+	else
+		for layer = 1, #weights do
+			local deltaNextLayer = deltas[layer + 1]
+			
+			local layerWeights = weights[layer]
+			local layerActivations = activations[layer]
+			
+			for i = 1, #layerWeights do
+				local activationNode = layerActivations[i]
+				local weightNode = layerWeights[i]
+				
+				for j = 1, #weightNode do
+					weightNode[j] = weightNode[j] + learningRate * deltaNextLayer[j] * activationNode
+				end
+			end
+		end
+	end
+
+	self.Weights = weights
+	
+	return deltas
+end
+
+return Propagator]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBX8VXJINRJ4YI2PB2IDRP3MUMJCIUHVELP">
+                <Properties>
+                    <string name="Name">DQL</string>
+                    <string name="ScriptGuid">{01ce6fc7-49b0-4ec8-89c3-a0aaeb8758e6}</string>
+                    <ProtectedString name="Source"><![CDATA[-- Deep Q-Learning
+
+local DQL = {}
+
+function DQL.new(
+	settings: {
+		DiscountFactor: number?,
+
+		OnForwardPropagation: (state: { number }) -> { { number } }?,
+		OnBackPropagation: (activations: { number }, expectedOutput: { number }) -> any?
+	}
+)
+	settings = settings or {}
+
+	local Agent = setmetatable({}, { __index = DQL })
+	Agent.OnForwardPropagation = settings.OnForwardPropagation
+	Agent.OnBackPropagation = settings.OnBackPropagation
+
+	Agent.Settings = {
+		DiscountFactor = settings.DiscountFactor or 0.99
+	}
+
+	return Agent
+end
+
+local mathMax = math.max
+local tableClone = table.clone
+
+function DQL:Learn(
+	settings: {
+		State: { number },
+		NextState: { number }?,
+		
+		Action: number?,
+		Reward: number?,
+		
+		ActionRewards: { { number } }?, -- { { action: number, reward: number } }
+
+		ReplayBuffer: ({})?,
+		BatchSize: number?
+	}
+)
+	assert(
+		self.OnForwardPropagation,
+		[[You need to set your Forward Propagation Function. 
+		Example:
+	DQL.OnForwardPropagation = function(states)
+		return NeuralNetwork:ForwardPropagation(states, ActivationFunction)
+	end
+	]]
+	)
+	
+	assert(
+		self.OnBackPropagation,
+		[[You need to set your Back Propagation Function. 
+		Example:
+	DQL.OnBackPropagation = function(activations, target)
+		return NeuralNetwork:BackPropagation(activations, target, { ActivationFunction = ActivationFunction, LearningRate = 0.01 })
+	end
+	]]
+	)
+
+	local learnBatches = {}
+
+	local experience = { settings.State, settings.ActionRewards or { { settings.Action, settings.Reward } }, settings.NextState }
+	
+	local replayBuffer = settings.ReplayBuffer
+	if replayBuffer then
+		replayBuffer:AddExperience(experience)
+
+		learnBatches = replayBuffer:SampleBatch(settings.BatchSize or 16)
+	else
+		learnBatches[1] = experience
+	end
+
+	local forwardPropagation = self.OnForwardPropagation
+	local backPropagation = self.OnBackPropagation
+
+	local discountFactor = self.Settings.DiscountFactor
+
+	for batchIndex = 1, #learnBatches do
+		local batch = learnBatches[batchIndex]
+		local state = batch[1]
+
+		local activations = forwardPropagation(state)
+		local nextActivations = batch[3]
+
+		local lastActivations = tableClone(activations[#activations])
+		local calculatedNextActivation = (nextActivations and mathMax(unpack(nextActivations[#nextActivations])) or 1)
+		
+		local actionRewards = batch[2]
+		for actionRewardIndex = 1, #actionRewards do
+			local actionBindedReward = actionRewards[actionRewardIndex]
+			
+			local target = actionBindedReward[2] + discountFactor * calculatedNextActivation
+			lastActivations[actionBindedReward[1]] = target
+		end
+
+		backPropagation(activations, lastActivations)
+	end
+end
+
+return DQL]]></ProtectedString>
+                </Properties>
+            </Item>
+        </Item>
+        <Item class="Folder" referent="RBXP6T2BRDKFOM8B6OHI3FG6R0JFIGS6VVO">
+            <Properties>
+                <string name="Name">Resources</string>
+            </Properties>
+            <Item class="ModuleScript" referent="RBX2B3EOQRITURH1ARK2X5SJK6H4M13F8Z2">
+                <Properties>
+                    <string name="Name">MLP</string>
+                    <string name="ScriptGuid">{fa0c1c04-654f-4ee7-ba19-b05b42487347}</string>
+                    <ProtectedString name="Source"><![CDATA[-- Multilayer Perceptron
+
+local MLP = {}
+
+function MLP.new(layers: { number }, valueFunction: () -> number | number)
+	local isValueFunction = typeof(valueFunction) == "function"
+	
+	local nodes = {}
+	local weights = {}
+	
+	for layerNumber = 1, #layers do
+		local numberOfNodes = layers[layerNumber]
+		
+		local layerNodes = {}
+		local layerWeights = {}
+		for nodeIndex = 1, numberOfNodes do
+			layerNodes[nodeIndex] = isValueFunction and valueFunction() or valueFunction or 0
+
+			local numberOfNodesOnNextLayer = layers[layerNumber + 1]
+			if numberOfNodesOnNextLayer then
+				local nodeWeights = {}
+				for nextLayerNodeIndex = 1, numberOfNodesOnNextLayer do
+					nodeWeights[nextLayerNodeIndex] = isValueFunction and valueFunction() or valueFunction or 0
+				end
+
+				layerWeights[nodeIndex] = nodeWeights
+			end
+		end
+
+		nodes[layerNumber] = layerNodes
+		weights[layerNumber] = #layerWeights > 0 and layerWeights or nil
+	end
+	
+	return { Nodes = nodes, Weights = weights, Format = "MLP" }
+end
+
+local httpService = game:GetService("HttpService")
+local tableConcat = table.concat
+local stringSplit = string.split
+local utf8Char = utf8.char
+
+-- Compression
+local CompressionFolder = script.Parent.Compression
+local CompressionAlgorithms = {
+	IEEE754 = require(CompressionFolder.IEEE754),
+	ALP = require(CompressionFolder.ALP)
+}
+
+local formatSplit = utf8Char(1)
+local weightNodeSplit = utf8Char(2)
+local layerSplit = utf8Char(3)
+local nodesAndWeightsSplit = utf8Char(4)
+
+function MLP:Compress(encoding: string?)
+	encoding = encoding or "IEEE754"
+	
+	local Compression = CompressionAlgorithms[encoding]
+	if Compression then
+		local nodes = self.Nodes
+		local weights = self.Weights
+
+		local compressionFormat = encoding
+		
+		local compressedNodes = {}
+		for layerIndex = 1, #nodes do
+			compressedNodes[layerIndex] = Compression.compress(nodes[layerIndex])
+		end
+		
+		local compressedWeights = {}
+		for layerIndex = 1, #weights do
+			local weightLayer = weights[layerIndex]
+			
+			local compressedWeightLayer = {}
+			for weightIndex = 1, #weightLayer do
+				compressedWeightLayer[weightIndex] = Compression.compress(weightLayer[weightIndex])
+			end
+			
+			compressedWeights[layerIndex] = tableConcat(compressedWeightLayer, weightNodeSplit)
+		end
+		
+		local nodeString = tableConcat(compressedNodes, layerSplit)
+		local weightString = tableConcat(compressedWeights, layerSplit)
+		
+		return `{compressionFormat}{formatSplit}{nodeString}{nodesAndWeightsSplit}{weightString}`
+	elseif encoding == "JSON" then
+		return httpService:JSONEncode(self)
+	else
+		error("Unknown Encoding Method:", encoding)
+	end
+end
+
+function MLP:Decompress(decoding: string?)
+	decoding = decoding or "IEEE754"
+	
+	local Compression = CompressionAlgorithms[decoding]
+	if Compression then
+		local compressionFormat, compressionData = unpack(stringSplit(self, formatSplit))
+		
+		local compressedNodes, compressedWeights = unpack(stringSplit(compressionData, nodesAndWeightsSplit))
+		
+		local nodes = {}
+		local weights = {}
+		
+		local splitNodes = stringSplit(compressedNodes, layerSplit)
+		for layerIndex = 1, #splitNodes do
+			nodes[layerIndex] = Compression.decompress(splitNodes[layerIndex])
+		end
+		
+		local splitWeightsLayers = stringSplit(compressedWeights, layerSplit)
+		for layerIndex = 1, #splitWeightsLayers do
+			local compressedLayerWeights = splitWeightsLayers[layerIndex]
+			local splitWeights = stringSplit(compressedLayerWeights, weightNodeSplit)
+			
+			local weightsLayer = {}
+			for layerIndex = 1, #splitWeights do
+				weightsLayer[layerIndex] = Compression.decompress(splitWeights[layerIndex])
+			end
+			
+			weights[layerIndex] = weightsLayer
+		end
+		
+		return {
+			Nodes = nodes,
+			Weights = weights,
+			Format = "MLP",
+		}
+	elseif decoding == "JSON" then
+		return httpService:JSONDecode(self)
+	else
+		error("Unknown Decoding Method:", decoding)
+	end
+end
+
+return MLP]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBX2NR27UST2O6TWFF3LZIDR6202FVPG2D8">
+                <Properties>
+                    <string name="Name">CNN</string>
+                    <string name="ScriptGuid">{75bdd571-7f38-4b6e-8107-69537b6c74de}</string>
+                    <ProtectedString name="Source"><![CDATA[--!native
+-- Convolutional Neural Networks
+
+local CNN = {}
+CNN.Kernels = require(script.Kernels)
+
+function CNN.new(ConvolutionalNetworkInfo: { { any } })
+	return { 
+		NetworkInfo = ConvolutionalNetworkInfo, 
+		Format = "CNN" 
+	}
+end
+
+function CNN:ForwardPropagation(grid: { { number } }, saveConvolutions: boolean?)
+	local networkInfo = self.NetworkInfo
+
+	local convolvedOutput = CNN.Operations.ForwardPropagate(grid, networkInfo, saveConvolutions)
+	return convolvedOutput
+end
+
+CNN.Operations = {}
+
+@native
+function CNN.Operations.ForwardPropagate(grid: { { number } }, kernelData: { any }, saveConvolutions: boolean?, garbageConvolutions: boolean?)
+	local convolutions = {}
+	
+	local isSavingKernelConvolutions = not saveConvolutions
+	for kernelIndex: number = 1, #kernelData do
+		local kernelInfo = kernelData[kernelIndex]
+		
+		local convulatedOutput
+		local kernelDataSize = 1
+		if typeof(kernelInfo[1]) == "string" then
+			kernelDataSize = 2
+			convulatedOutput = CNN.Operations.Pool("MaxPooling", grid, kernelInfo[2])
+		else
+			convulatedOutput = CNN.Operations.Convolute(grid, kernelInfo[1])
+		end
+
+		local kernelChildren = kernelInfo[kernelDataSize + 1]
+		local kernelHasChildren = kernelChildren and #kernelChildren > 0
+
+		local convolutedLayer
+		if kernelHasChildren then
+			local kernelConvolutions = CNN.Operations.ForwardPropagate(convulatedOutput, kernelChildren, saveConvolutions, isSavingKernelConvolutions)
+			convolutedLayer = kernelConvolutions
+		else
+			convolutedLayer = { convulatedOutput }
+		end
+
+		if garbageConvolutions then convolutions[#convolutions] = nil end
+		
+		for layerIndex = 1, #convolutedLayer do
+			convolutions[#convolutions + 1] = convolutedLayer[layerIndex]
+		end
+	end
+	
+	return convolutions
+end
+
+@native
+function CNN.Operations.Convolute(grid: { { number } }, kernel: { { number } })
+	local convolutedLayer = {}
+	
+	for y = 1, #grid do
+		local convolutedRow = {}
+		for x = 1, #grid[y] do
+			local dotProduct = 0
+			for kernelY = 1, #kernel do
+				local kernelYGrid = grid[y - 1 + kernelY]
+				if not kernelYGrid then continue end
+				
+				for kernelX = 1, #kernel[kernelY] do
+					local kernelXGrid = kernelYGrid[x - 1 + kernelX]
+					if not kernelXGrid then break end
+					
+					dotProduct += kernelXGrid * kernel[kernelY][kernelX]
+				end
+			end
+			
+			convolutedRow[x] = dotProduct
+		end
+		
+		convolutedLayer[y] = convolutedRow
+	end
+	
+	return convolutedLayer
+end
+
+@native
+function CNN.Operations.Pool(poolType: string, grid: { { number } }, poolSize: { number }): { { number } }
+	return CNN.Pooling[poolType](grid, poolSize)
+end
+
+CNN.Pooling = {}
+local mathHuge = math.huge
+
+@native
+function CNN.Pooling.MaxPooling(grid: { { number } }, poolSize: { number })
+	local pooledLayer = {}
+	local poolHeight, poolWidth = poolSize[1], poolSize[2]
+
+	for y = 1, #grid, poolHeight do
+		local pooledRow = {}
+		for x = 1, #grid[1], poolWidth do
+			local maxVal = -mathHuge
+			for py = 0, poolHeight - 1 do
+				for px = 0, poolWidth - 1 do
+					local val = grid[y + py] and grid[y + py][x + px]
+					if val and val > maxVal then
+						maxVal = val
+					end
+				end
+			end
+			pooledRow[#pooledRow + 1] = maxVal
+		end
+		pooledLayer[#pooledLayer + 1] = pooledRow
+	end
+
+	return pooledLayer
+end
+
+return CNN]]></ProtectedString>
+                </Properties>
+                <Item class="ModuleScript" referent="RBXOEL3G89S9YPKEZ2NMVY3N5UNTBONXYNJ">
+                    <Properties>
+                        <string name="Name">Kernels</string>
+                        <string name="ScriptGuid">{fa8ec9e7-cfe5-4ca8-bae9-621581ff16ca}</string>
+                        <ProtectedString name="Source"><![CDATA[local Kernels = {
+	Size3x3 = {
+		Identity = {
+			{0, 0, 0},
+			{0, 1, 0},
+			{0, 0, 0}
+		},
+
+		EdgeDetection1 = {
+			{1, 0, -1},
+			{0, 0, 0},
+			{-1, 0, 1}
+		},
+
+		EdgeDetection2 = {
+			{0, 1, 0},
+			{1, -4, 1},
+			{0, 1, 0}
+		},
+
+		EdgeDetection3 = {
+			{-1, -1, -1},
+			{-1, 8, -1},
+			{-1, -1, -1}
+		},
+
+		Sharpen = {
+			{0, -1, 0},
+			{-1, 5, -1},
+			{0, -1, 0}
+		},
+
+		BoxBlur = {
+			{1/9, 1/9, 1/9},
+			{1/9, 1/9, 1/9},
+			{1/9, 1/9, 1/9}
+		},
+
+		GaussianBlur = {
+			{1/16, 2/16, 1/16},
+			{2/16, 4/16, 2/16},
+			{1/16, 2/16, 1/16}
+		},
+
+		Emboss = {
+			{-2, -1, 0},
+			{-1, 1, 1},
+			{0, 1, 2}
+		},
+
+		SobelX = {
+			{-1, 0, 1},
+			{-2, 0, 2},
+			{-1, 0, 1}
+		},
+
+		SobelY = {
+			{-1, -2, -1},
+			{0, 0, 0},
+			{1, 2, 1}
+		},
+
+		PrewittX = {
+			{-1, 0, 1},
+			{-1, 0, 1},
+			{-1, 0, 1}
+		},
+
+		PrewittY = {
+			{-1, -1, -1},
+			{0, 0, 0},
+			{1, 1, 1}
+		},
+		
+		Laplacian1 = {
+			{0, 1, 0},
+			{1, -4, 1},
+			{0, 1, 0}
+		},
+
+		Laplacian2 = {
+			{1, 1, 1},
+			{1, -8, 1},
+			{1, 1, 1}
+		},
+		
+		UnsharpMasking = {
+			{-1/9, -1/9, -1/9},
+			{-1/9, 17/9, -1/9},
+			{-1/9, -1/9, -1/9}
+		},
+
+		HighPass = {
+			{-1, -1, -1},
+			{-1, 8, -1},
+			{-1, -1, -1}
+		},
+		
+		KirschNorth = {
+			{5, 5, 5},
+			{-3, 0, -3},
+			{-3, -3, -3}
+		},
+		
+		KirschNortheast = {
+			{5, 5, -3},
+			{5, 0, -3},
+			{-3, -3, -3}
+		},
+		
+		KirschEast = {
+			{5, -3, -3},
+			{5, 0, -3},
+			{5, -3, -3}
+		},
+		
+		KirschSoutheast = {
+			{-3, -3, -3},
+			{5, 0, -3},
+			{5, 5, -3}
+		},
+		
+		KirschSouth = {
+			{-3, -3, -3},
+			{-3, 0, -3},
+			{5, 5, 5}
+		},
+		
+		KirschSouthwest = {
+			{-3, -3, -3},
+			{-3, 0, 5},
+			{-3, 5, 5}
+		},
+		
+		KirschWest = {
+			{-3, -3, 5},
+			{-3, 0, 5},
+			{-3, -3, 5}
+		},
+		
+		KirschNorthwest = {
+			{-3, -3, -3},
+			{-3, 0, 5},
+			{5, 5, 5}
+		},
+		
+		RobertsX = {
+			{1, 0},
+			{0, -1}
+		},
+		
+		RobertsY = {
+			{0, 1},
+			{-1, 0}
+		},
+		
+		ScharrX = {
+			{3, 0, -3},
+			{10, 0, -10},
+			{3, 0, -3}
+		},
+		ScharrY = {
+			{3, 10, 3},
+			{0, 0, 0},
+			{-3, -10, -3}
+		},
+		
+		HorizontalLine = {
+			{-1, -1, -1},
+			{2, 2, 2},
+			{-1, -1, -1}
+		},
+		VerticalLine = {
+			{-1, 2, -1},
+			{-1, 2, -1},
+			{-1, 2, -1}
+		},
+		
+		Diagonal45 = {
+			{-1, -1, 2},
+			{-1, 2, -1},
+			{2, -1, -1}
+		},
+		
+		Diagonal135 = {
+			{2, -1, -1},
+			{-1, 2, -1},
+			{-1, -1, 2}
+		},
+		
+		GradientMagnitude = {
+			{1, 1, 1},
+			{1, -7, 1},
+			{1, 1, 1}
+		}
+	}
+}
+
+return Kernels]]></ProtectedString>
+                    </Properties>
+                </Item>
+            </Item>
+            <Item class="ModuleScript" referent="RBXPVUBZ1KEG9Y1HPQR304SY1899TIYSFCS">
+                <Properties>
+                    <string name="Name">ReplayBuffer</string>
+                    <string name="ScriptGuid">{48e0cf0c-144b-4765-8bb3-2a3892a1c54d}</string>
+                    <ProtectedString name="Source"><![CDATA[local ReplayBuffer = {}
+
+function ReplayBuffer.new(bufferSize: number)
+	local Replay = {}
+	Replay.Buffer = {}
+	Replay.Pointer = 0
+	Replay.MaxSize = bufferSize or 32
+	return setmetatable(Replay, { __index = ReplayBuffer })
+end
+
+function ReplayBuffer:AddExperience(experience)
+	local newPointer = self.Pointer%self.MaxSize + 1
+	self.Buffer[newPointer] = experience
+	self.Pointer = newPointer
+end
+
+local mathRandom = math.random
+
+function ReplayBuffer:SampleBatch(batchSize: number)
+	local batch = {}
+	
+	local bufferData = self.Buffer
+	local bufferLength = #bufferData
+	
+	for i = 1, batchSize or bufferLength do
+		batch[i] = bufferData[mathRandom(bufferLength)]
+	end
+	
+	return batch
+end
+
+return ReplayBuffer]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="Folder" referent="RBXVK1H4AZLBVYMFCEVNGS5YDYR9E4VGJWK">
+                <Properties>
+                    <string name="Name">Compression</string>
+                </Properties>
+                <Item class="ModuleScript" referent="RBX74G6DC45PQ83MNUZ8NEH7J5VCDO0MA59">
+                    <Properties>
+                        <string name="Name">ALP</string>
+                        <string name="ScriptGuid">{1bf536eb-c211-42dd-b5cd-0fff8dacaad5}</string>
+                        <ProtectedString name="Source"><![CDATA[local Compression = {}
+
+local frexp = math.frexp
+
+local extract = bit32.extract
+local lshift = bit32.lshift
+local bor = bit32.bor
+
+local char = string.char
+local byte = string.byte
+
+local insert = table.insert
+local tableConcat = table.concat
+
+local function floatToBits(n)
+	local sign = 0
+	if n < 0 then
+		sign = 1
+		n = -n
+	end
+
+	local mantissa, exponent = frexp(n)
+	if n == 0 then 
+		mantissa, exponent = 0, 0
+	else
+		mantissa = (mantissa * 2 - 1) * (2 ^ 23)
+		exponent = exponent + 126
+	end
+
+	local bits = sign * (2 ^ 31) + exponent * (2 ^ 23) + mantissa
+	return bits
+end
+
+local function bitsToFloat(bits)
+	if bits == 0 then return 0 end
+
+	local sign = extract(bits, 31, 1)
+	local exponent = extract(bits, 23, 8)
+	local mantissa = extract(bits, 0, 23)
+
+	if sign == 1 then sign = -1 else sign = 1 end
+
+	if exponent == 0 then
+		return sign * mantissa * (2 ^ -23) * (2 ^ -126)
+	else
+		return sign * (1 + mantissa * (2 ^ -23)) * (2 ^ (exponent - 127))
+	end
+end
+
+function Compression.compress(numbers)
+	local bits = {}
+	for i = 1, #numbers do
+		local num = numbers[i]
+		local b = floatToBits(num)
+		insert(bits, char(extract(b, 24, 8)))
+		insert(bits, char(extract(b, 16, 8)))
+		insert(bits, char(extract(b, 8, 8)))
+		insert(bits, char(extract(b, 0, 8)))
+	end
+	return tableConcat(bits)
+end
+
+function Compression.decompress(str)
+	local numbers = {}
+	for i = 1, #str, 4 do
+		local b = bor(
+			lshift(byte(str, i), 24),
+			lshift(byte(str, i + 1), 16),
+			lshift(byte(str, i + 2), 8),
+			byte(str, i + 3)
+		)
+		insert(numbers, bitsToFloat(b))
+	end
+	return numbers
+end
+
+return Compression
+]]></ProtectedString>
+                    </Properties>
+                </Item>
+                <Item class="ModuleScript" referent="RBX6G7UMOBYI52G84XLPNM6GFX0K2PQENPQ">
+                    <Properties>
+                        <string name="Name">IEEE754</string>
+                        <string name="ScriptGuid">{8f31dd13-343f-4eb9-a64c-1d3aca2606a7}</string>
+                        <ProtectedString name="Source"><![CDATA[local Compression = {}
+
+local abs = math.abs
+local frexp = math.frexp
+local ldexp = math.ldexp
+
+local bor = bit32.bor
+
+local tableConcat = table.concat
+
+local stringPack = string.pack
+local stringUnpack = string.unpack
+
+local char = string.char
+local format = string.format
+local byte = string.byte
+
+local extract = bit32.extract
+local insert = table.insert
+
+function Compression.floatToBinary(num)
+	local sign = num < 0 and 1 or 0
+	num = abs(num)
+	local mantissa, exponent = frexp(num)
+	mantissa = (mantissa * 2 - 1) * ldexp(0.5, 24)
+	exponent = exponent + 126
+	local raw = bor(sign * 0x80000000, exponent * 0x800000, mantissa)
+	return stringPack(">I4", raw)
+end
+
+local floatToBinary = Compression.floatToBinary
+
+function Compression.compress(array: { number })
+	local compressed = {}
+	for arrayIndex = 1, #array do
+		compressed[arrayIndex] = floatToBinary(array[arrayIndex])
+	end
+	
+	local compressedString = tableConcat(compressed)
+	local compressedASCII = compressedString:gsub(".", function(c) return format("%02X", byte(c)) end)
+	return compressedASCII
+end
+
+function Compression.decompress(compressedASCII: string)
+	local binary = compressedASCII:gsub("..", function(hex) return char(tonumber(hex, 16)) end)
+	local decompressed = {}
+	for i = 1, #binary, 4 do
+		local raw = stringUnpack(">I4", binary:sub(i, i + 3))
+		local sign = extract(raw, 31, 1)
+		local exponent = extract(raw, 23, 8) - 126
+		local mantissa = (extract(raw, 0, 23) + 0x800000) / 0x1000000
+		local number = ldexp(mantissa, exponent) * (sign == 1 and -1 or 1)
+		insert(decompressed, number)
+	end
+	
+	return decompressed
+end
+
+return Compression]]></ProtectedString>
+                    </Properties>
+                </Item>
+            </Item>
+            <Item class="ModuleScript" referent="RBX4H1XG6WCQT2J63VIRFP9LEBBE4NT47P9">
+                <Properties>
+                    <string name="Name">ObjectWrapper</string>
+                    <string name="ScriptGuid">{619ba06f-b111-492f-8eb4-e858a73d4db6}</string>
+                    <ProtectedString name="Source"><![CDATA[local ObjectWrapper = {}
+
+function ObjectWrapper.wrap<objectType, wrapperType>(object: objectType, wrapper: wrapperType): (objectType & wrapperType) & (() -> objectType)
+	return setmetatable({}, {
+		__index = function(metaWrapper, index)
+			local wrapperGet = rawget(wrapper, index)
+			if wrapperGet then 
+				local typeOfProperty = typeof(wrapperGet)
+				if typeOfProperty == "function" then
+					return function(...)
+						return wrapperGet(metaWrapper, select(2, ...))
+					end
+				else
+					return wrapperGet
+				end
+			else
+				local property = object[index]
+				local typeOfProperty = typeof(property)
+				if typeOfProperty == "function" then
+					return function(...)
+						return property(object, select(2, ...))
+					end
+				else
+					return property
+				end
+			end
+		end,
+
+		__newindex = function(_, index, value)
+			xpcall(function()
+				object[index] = value
+			end, function()
+				wrapper[index] = value
+			end)
+		end,
+
+		__call = function() return object end
+	})
+end
+
+return ObjectWrapper]]></ProtectedString>
+                </Properties>
+            </Item>
+        </Item>
+        <Item class="Folder" referent="RBXDZKZ8NYV7ZA6UGY2IVX0BMK9ZQ5Q3CX2">
+            <Properties>
+                <string name="Name">ActivationFunctions</string>
+            </Properties>
+            <Item class="ModuleScript" referent="RBXM4M7U3X05E99IBLQ3LLU3XVS4PRTTM94">
+                <Properties>
+                    <string name="Name">GELU</string>
+                    <string name="ScriptGuid">{9a286f71-c080-4528-9701-084a1dc46148}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+
+local sqrt = math.sqrt
+local tanh = math.tanh
+local sqrt_2_pi = sqrt(2 / math.pi)
+
+ActivationFunction.Activation = function(_, x: number)
+	return 0.5 * x * (1 + tanh(sqrt_2_pi * (x + 0.044715 * x^3)))
+end
+
+ActivationFunction.Derivative = function(_, x: number)
+	local tanh_val = tanh(sqrt_2_pi * (x + 0.044715 * x^3))
+	return 0.5 * (1 + tanh_val) + (0.5 * x * sqrt_2_pi * (1 - tanh_val^2) * (1 + 0.134145 * x^2))
+end
+
+return ActivationFunction
+]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBXAVOKITK111AH91ESCGBB0KRGHDMQ7HSK">
+                <Properties>
+                    <string name="Name">LeakyReLU</string>
+                    <string name="ScriptGuid">{45c6f1fc-1015-479d-828d-be92dd493e0d}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+ActivationFunction.Activation = function(_, x: number, alpha: number?)
+	return x > 0 and x or (alpha or 0.01) * x
+end
+
+ActivationFunction.Derivative = function(_, x: number, alpha: number?)
+	return x > 0 and 1 or (alpha or 0.01)
+end
+
+return ActivationFunction]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBXSGQ1RQHCEY1SW8ZUR5F4N1IGT8E7NIIO">
+                <Properties>
+                    <string name="Name">ReLU</string>
+                    <string name="ScriptGuid">{18acf817-10bd-4b08-9c30-d088a9ef2c63}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+ActivationFunction.Activation = function(_, x: number)
+	return x > 0 and x or 0
+end
+
+ActivationFunction.Derivative = function(_, x: number)
+	return x > 0 and 1 or 0
+end
+
+return ActivationFunction]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBXPY0JY29RFL88O4YI3BKR0YMJ7FL9WGO9">
+                <Properties>
+                    <string name="Name">SELU</string>
+                    <string name="ScriptGuid">{911a724a-03ce-40e8-9b58-288cd5c92839}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+
+local exp = math.exp
+ActivationFunction.Activation = function(_, x: number, alpha: number?)
+	return x >= 1 and x or (alpha or 1.0507) * ((x - 1) / (exp(x) - 1))
+end
+ActivationFunction.Derivative = function(_, x: number, alpha: number?)
+	return x >= 1 and 1 or (alpha or 1.0507) * (exp(x) / (exp(x) - 1))
+end
+
+return ActivationFunction]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBX3OR9Q953B2XUX15JX6O4DSOHXQ1FECT0">
+                <Properties>
+                    <string name="Name">ThresholdReLU</string>
+                    <string name="ScriptGuid">{ff968948-5df7-419f-b8f2-d17e2861370f}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+
+ActivationFunction.Activation = function(_, x: number, theta: number?)
+	theta = theta or 1.0
+	return x > theta and x or 0
+end
+
+ActivationFunction.Derivative = function(_, x: number, theta: number?)
+	theta = theta or 1.0
+	return x > theta and 1 or 0
+end
+
+return ActivationFunction
+]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBXLBEGMPGBI8ER13FXLBPNWZCHIZZRNJJS">
+                <Properties>
+                    <string name="Name">BinaryStep</string>
+                    <string name="ScriptGuid">{cd8d00ac-8fbf-4239-8bc1-0518925ef9c8}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+ActivationFunction.Activation = function(_, x: number)
+	return x >= 0 and 1 or 0
+end
+
+ActivationFunction.Derivative = function(_, x: number)
+	return 0
+end
+
+return ActivationFunction]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBXBG4BGJKCA3G9RG1VA1AH2007QMS8XCX9">
+                <Properties>
+                    <string name="Name">HardSigmoid</string>
+                    <string name="ScriptGuid">{54966301-56dd-4746-948c-413e6e527958}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+
+local max = math.max
+local min = math.min
+
+ActivationFunction.Activation = function(_, x: number)
+	return max(0, min(1, 0.2 * x + 0.5))
+end
+
+ActivationFunction.Derivative = function(_, x: number)
+	return (x > -2.5 and x < 2.5) and 0.2 or 0
+end
+
+return ActivationFunction
+]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBXC8YWZR4JWJVYF6SYVCC91IAF9EL314R1">
+                <Properties>
+                    <string name="Name">HardSwish</string>
+                    <string name="ScriptGuid">{215f893b-1499-4ca9-a910-2805e3b751e6}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+
+local max = math.max	
+local min = math.min
+
+ActivationFunction.Activation = function(_, x: number)
+	return x * max(0, min(1, 0.2 * x + 0.5))
+end
+
+ActivationFunction.Derivative = function(_, x: number)
+	local sigmoid_x = max(0, min(1, 0.2 * x + 0.5))
+	return sigmoid_x + x * ((x > -2.5 and x < 2.5) and 0.2 or 0)
+end
+
+return ActivationFunction
+]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBXVXA8HZJSJL17414UYFC4XRVGIW4PS3FK">
+                <Properties>
+                    <string name="Name">HardTanH</string>
+                    <string name="ScriptGuid">{abac6051-0b5b-465a-98c4-0f12b76dc842}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+
+ActivationFunction.Activation = function(_, x: number)
+	if x < -1 then
+		return -1
+	elseif x > 1 then
+		return 1
+	else
+		return x
+	end
+end
+
+ActivationFunction.Derivative = function(_, x: number)
+	return (x > -1 and x < 1) and 1 or 0
+end
+
+return ActivationFunction
+]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBXQJKIH0JEBWYR5YGMGHA4KIF9G1NUK2DQ">
+                <Properties>
+                    <string name="Name">SoftShrink</string>
+                    <string name="ScriptGuid">{7ad2bada-f923-4005-920a-61d94bac112a}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+
+ActivationFunction.Activation = function(_, x: number, lambda: number?)
+	lambda = lambda or 0.5
+	if x > lambda then
+		return x - lambda
+	elseif x < -lambda then
+		return x + lambda
+	else
+		return 0
+	end
+end
+
+ActivationFunction.Derivative = function(_, x: number, lambda: number?)
+	lambda = lambda or 0.5
+	return (x > lambda or x < -lambda) and 1 or 0
+end
+
+return ActivationFunction
+]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBXB8GCTOMJ30F9999NJIZ0BO7FAYDZKBQG">
+                <Properties>
+                    <string name="Name">ELU</string>
+                    <string name="ScriptGuid">{1e450699-3a51-4438-af6c-71742a31b84a}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+
+local exp = math.exp
+ActivationFunction.Activation = function(_, x: number, alpha: number?)
+	return x > 0 and x or (alpha or 1) * (exp(x) - 1)
+end
+
+ActivationFunction.Derivative = function(_, x: number, alpha: number?)
+	return x > 0 and 1 or (alpha or 1) * exp(x)
+end
+
+return ActivationFunction]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBX9PTSYZHN3KMAAB0ZQA4TV0BQ9CCOA0PQ">
+                <Properties>
+                    <string name="Name">Softplus</string>
+                    <string name="ScriptGuid">{8f5d2706-8181-4724-8d53-9060ac9435ec}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+
+local log = math.log
+local exp = math.exp
+
+ActivationFunction.Activation = function(_, x: number)
+	return log(1 + exp(x))
+end
+
+ActivationFunction.Derivative = function(_, x: number)
+	return 1 / (1 + exp(-x))
+end
+
+return ActivationFunction]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBXIMLJTPPV9GQG4OI7EC3DLVQX4NRAY0H2">
+                <Properties>
+                    <string name="Name">Softsign</string>
+                    <string name="ScriptGuid">{7916467b-5a4e-435e-8de3-2191e41f925b}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+
+local abs = math.abs
+ActivationFunction.Activation = function(_, x: number)
+	return x / (1 + abs(x))
+end
+
+ActivationFunction.Derivative = function(_, x: number)
+	return 1 / ((1 + abs(x))^2)
+end
+
+return ActivationFunction
+]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBXIQHLVBKJOR3AVGD51K151FBGJF5V87ZR">
+                <Properties>
+                    <string name="Name">BentIdentity</string>
+                    <string name="ScriptGuid">{e0ae8107-0666-4f42-80c6-20f4b706aabd}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+
+local sqrt = math.sqrt
+ActivationFunction.Activation = function(_, x: number)
+	return (sqrt(x^2 + 1) - 1) / 2 + x
+end
+
+ActivationFunction.Derivative = function(_, x: number)
+	return x / (2 * sqrt(x^2 + 1)) + 1
+end
+
+return ActivationFunction
+]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBXEUDWMR7UCBWUDCCGIKHA7W3NMU7XS2XG">
+                <Properties>
+                    <string name="Name">BipolarSigmoid</string>
+                    <string name="ScriptGuid">{9e2f300c-1461-4f8b-ae08-401f80973ac2}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+
+local exp = math.exp
+ActivationFunction.Activation = function(_, x: number)
+	return (1 - exp(-x)) / (1 + exp(-x))
+end
+
+ActivationFunction.Derivative = function(_, x: number)
+	local sigmoid_x = (1 - exp(-x)) / (1 + exp(-x))
+	return 0.5 * (1 + sigmoid_x) * (1 - sigmoid_x)
+end
+
+return ActivationFunction
+]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBXTRB8PZICTSI23MCVHL9NFJI0H22RPOJW">
+                <Properties>
+                    <string name="Name">Gaussian</string>
+                    <string name="ScriptGuid">{6cfa77be-9c4d-46df-b894-e3c543cfe0d5}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+
+local exp = math.exp
+ActivationFunction.Activation = function(_, x: number)
+	return exp(-x^2)
+end
+
+ActivationFunction.Derivative = function(_, x: number)
+	return -2 * x * exp(-x^2)
+end
+
+return ActivationFunction
+]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBX1DK4WT8PCWNJ300RI2M4KSG49OTBRY76">
+                <Properties>
+                    <string name="Name">ISRU</string>
+                    <string name="ScriptGuid">{4162f37f-7874-499d-a549-4706a7e38d36}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+
+local sqrt = math.sqrt
+ActivationFunction.Activation = function(_, x: number, alpha: number?)
+	alpha = alpha or 1
+	return x / sqrt(1 + alpha * x^2)
+end
+
+ActivationFunction.Derivative = function(_, x: number, alpha: number?)
+	alpha = alpha or 1
+	return (1 / sqrt(1 + alpha * x^2))^3
+end
+
+return ActivationFunction
+]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBX35QIQPGY17KDC651TXKMCBNNG40L2J2J">
+                <Properties>
+                    <string name="Name">Sigmoid</string>
+                    <string name="ScriptGuid">{d6470e17-17ac-4f13-8723-315a7b450fa5}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+
+local exp = math.exp
+ActivationFunction.Activation = function(_, x: number)
+	return 1 / (1 + exp(-x))
+end
+
+ActivationFunction.Derivative = function(_, x: number)
+	return exp(-x)/((1 + exp(-x))^2)
+end
+
+return ActivationFunction]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBX0QHU05ZBSKGJVMV4DP2IXYRQ3FN0XMGR">
+                <Properties>
+                    <string name="Name">Swish</string>
+                    <string name="ScriptGuid">{509b32ff-08c4-4268-8177-66cbd6cb7f33}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+
+local exp = math.exp
+ActivationFunction.Activation = function(_, x: number)
+	return x / (1 + exp(-x))
+end
+
+ActivationFunction.Derivative = function(_, x: number)
+	local sigma = 1 / (1 + exp(-x))
+	return sigma + x * sigma * (1 - sigma)
+end
+
+return ActivationFunction
+]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBXRVYN9C821PKUK27K47JDRC0746710TD3">
+                <Properties>
+                    <string name="Name">TanH</string>
+                    <string name="ScriptGuid">{11dc4df9-58e8-4f38-b102-488281ca5101}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+
+local tanh = math.tanh
+ActivationFunction.Activation = function(_, x: number)
+	return tanh(x)
+end
+
+ActivationFunction.Derivative = function(_, x: number)
+	return 1 - tanh(x)^2
+end
+
+return ActivationFunction]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBX6AC28VWGUE7JSQTL0Y54FI2443I90DG2">
+                <Properties>
+                    <string name="Name">LogSigmoid</string>
+                    <string name="ScriptGuid">{9c38b27e-50ee-4981-a7c8-69803ce9b411}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+
+local log = math.log
+local exp = math.exp
+
+ActivationFunction.Activation = function(_, x: number)
+	return log(1 / (1 + exp(-x)))
+end
+
+ActivationFunction.Derivative = function(_, x: number)
+	local sigmoid = 1 / (1 + exp(-x))
+	return sigmoid * (1 - sigmoid)
+end
+
+return ActivationFunction
+]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBXD2FLEO79G8SBRF004IP74V9FN9YD61HE">
+                <Properties>
+                    <string name="Name">Logit</string>
+                    <string name="ScriptGuid">{643bdc23-5ad4-4803-a078-27f88c620d3b}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+
+local log = math.log
+ActivationFunction.Activation = function(_, x: number)
+	return log(x / (1 - x))
+end
+
+ActivationFunction.Derivative = function(_, x: number)
+	return 1 / (x * (1 - x))
+end
+
+return ActivationFunction
+]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBXXUXX6K1SZOCVY0BWIZD6YCDM66NOMNMZ">
+                <Properties>
+                    <string name="Name">Linear</string>
+                    <string name="ScriptGuid">{1ad347b2-9480-40bb-bad1-14b06e049506}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+ActivationFunction.Activation = function(_, x: number)
+	return x
+end
+
+ActivationFunction.Derivative = function(_)
+	return 1
+end
+
+return ActivationFunction]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBXXGBKOYWQVSB9H4MKTH7TQRZG9MH6QB5Z">
+                <Properties>
+                    <string name="Name">Softmax</string>
+                    <string name="ScriptGuid">{fa763b41-76e0-45bf-88ab-11c3529898e2}</string>
+                    <ProtectedString name="Source"><![CDATA[local ActivationFunction = {}
+
+local exp = math.exp
+
+ActivationFunction.Activation = function(activations: { number })
+	local result = {}
+	
+	local denominator = 0
+	for i = 1, #activations do
+		local calculatedExponent = exp(activations[i])
+		
+		result[i] = calculatedExponent
+		denominator += calculatedExponent
+	end
+	
+	for i = 1, #result do
+		result[i] /= denominator
+	end
+	
+	return result, denominator
+end
+
+return ActivationFunction]]></ProtectedString>
+                </Properties>
+            </Item>
+        </Item>
+        <Item class="Folder" referent="RBXLWVVRC6XO54XI86MR5JZ9AWONKZ55PD7">
+            <Properties>
+                <string name="Name">Optimizers</string>
+            </Properties>
+            <Item class="ModuleScript" referent="RBXKARVF0GT0M8YQXD347K401ARMEETOAH3">
+                <Properties>
+                    <string name="Name">Adam</string>
+                    <string name="ScriptGuid">{27e8619b-4dd4-4e95-8d5d-e8dc20ffd758}</string>
+                    <ProtectedString name="Source"><![CDATA[local Optimizer = {}
+
+function Optimizer.new()
+	return setmetatable({
+		Momentum = {},
+		Velocity = {},
+
+		Beta1 = 0.9,
+		Beta2 = 0.999,
+		Epsilon = 1e-8,
+		TimeStep = 0
+	}, { __index = Optimizer })
+end
+
+local sqrt = math.sqrt
+function Optimizer:Optimize(weights: {}, deltas: {}, activations: {}, learningRate: number)
+	self.TimeStep = self.TimeStep + 1
+	local beta1, beta2, epsilon = self.Beta1, self.Beta2, self.Epsilon
+	local timeStep = self.TimeStep
+
+	local momentum = self.Momentum
+	local velocity = self.Velocity
+
+	local inverseBeta1 = 1 - beta1
+	local inverseBeta2 = 1 - beta2
+	
+	local inverseBeta1TimeStep = 1 - beta1 ^ timeStep
+	local inverseBeta2TimeStep = 1 - beta2 ^ timeStep
+
+	for layer = 1, #weights do
+		local weightLayer = weights[layer]
+		
+		local momentumLayer = momentum[layer]
+		local velocityLayer = velocity[layer]
+		
+		if not momentumLayer then
+			local newMomentumLayer = {}
+			local newVelocityLayer = {}
+			
+			for i = 1, #weightLayer do
+				local momentumLayerWeights = {}
+				local velocityLayerWeights = {}
+				
+				for j = 1, #weightLayer[i] do
+					momentumLayerWeights[j] = 0
+					velocityLayerWeights[j] = 0
+				end
+				
+				newMomentumLayer[i] = momentumLayerWeights
+				newVelocityLayer[i] = velocityLayerWeights
+			end
+			
+			momentum[layer] = newMomentumLayer
+			velocity[layer] = newVelocityLayer
+			
+			momentumLayer = newMomentumLayer
+			velocityLayer = newVelocityLayer
+		end
+
+		local deltaNextLayer = deltas[layer + 1]
+		local activationLayer = activations[layer]
+
+		for i = 1, #weightLayer do
+			local weightNode = weightLayer[i]
+			
+			local momentumLayerWeights = momentumLayer[i]
+			local velocityLayerWeights = velocityLayer[i]
+			
+			for j = 1, #weightNode do
+				local gradient = deltaNextLayer[j] * activationLayer[i]
+				momentumLayerWeights[j] = beta1 * momentumLayerWeights[j] + inverseBeta1 * gradient
+				velocityLayerWeights[j] = beta2 * velocityLayerWeights[j] + inverseBeta2 * (gradient ^ 2)
+
+				local mHat = momentumLayerWeights[j] / inverseBeta1TimeStep
+				local vHat = velocityLayerWeights[j] / inverseBeta2TimeStep
+
+				weightNode[j] = weightNode[j] + learningRate * mHat / (sqrt(vHat) + epsilon)
+			end
+		end
+	end
+end
+
+return Optimizer
+]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBXHGYVETLFMVRDZ5AFORZ5TBX0I4BNCEH2">
+                <Properties>
+                    <string name="Name">Momentum</string>
+                    <string name="ScriptGuid">{e9ca5c88-cb82-4042-9f1f-0eca55013733}</string>
+                    <ProtectedString name="Source"><![CDATA[local Optimizer = {}
+
+function Optimizer.new()
+	return setmetatable({
+		Momentum = {},
+		Beta = 0.9,
+	}, { __index = Optimizer })
+end
+
+function Optimizer:Optimize(weights, deltas, activations, learningRate)
+	local beta = self.Beta
+	local momentum = self.Momentum
+
+	local inverseBeta = 1 - beta
+
+	for layer = 1, #weights do
+		local weightsLayer = weights[layer]
+		
+		local momentumLayer = momentum[layer]
+		if not momentumLayer then
+			local newMomentumLayer = {}
+			for i = 1, #weightsLayer do
+				local momentumWeights = {}
+				for j = 1, #weights[layer][i] do
+					momentumWeights[j] = 0
+				end
+				newMomentumLayer[i] = momentumWeights
+			end
+			
+			momentum[layer] = newMomentumLayer
+			momentumLayer = newMomentumLayer
+		end
+
+		local deltaNextLayer = deltas[layer + 1]
+		local activationLayer = activations[layer]
+
+		for i = 1, #weightsLayer do
+			local layerWeightNode = weightsLayer[i]
+			local momentumWeights = momentumLayer[i]
+			
+			for j = 1, #layerWeightNode do
+				local gradient = deltaNextLayer[j] * activationLayer[i]
+				local newMomentumWeight = beta * momentumWeights[j] + inverseBeta * gradient
+				
+				momentumWeights[j] = newMomentumWeight
+				layerWeightNode[j] = layerWeightNode[j] - learningRate * newMomentumWeight
+			end
+		end
+	end
+end
+
+return Optimizer
+]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBX0FO294CIT7Y43CJ8EVNJP480LG0PPBGS">
+                <Properties>
+                    <string name="Name">SGD</string>
+                    <string name="ScriptGuid">{0f166a60-a3d8-4ec8-8620-f580b0623f38}</string>
+                    <ProtectedString name="Source"><![CDATA[-- Stochastic Gradient Descent
+
+local Optimizer = {}
+
+function Optimizer.new()
+	return setmetatable({}, { __index = Optimizer })
+end
+
+function Optimizer:Optimize(weights, deltas, activations, learningRate)
+	for layer = 1, #weights do
+		local weightsLayer = weights[layer]
+		local deltaNextLayer = deltas[layer + 1]
+		local activationLayer = activations[layer]
+		
+		for i = 1, #weightsLayer do
+			local weightNode = weightsLayer[i]
+			local activationNode = activationLayer[i]
+			
+			for j = 1, #weightNode do
+				local gradient = deltaNextLayer[j] * activationNode
+				weightNode[j] = weightNode[j] - learningRate * gradient
+			end
+		end
+	end
+end
+
+return Optimizer
+]]></ProtectedString>
+                </Properties>
+            </Item>
+        </Item>
+        <Item class="Folder" referent="RBX3FD69TCFN3ZIGTTZN7Z74P5P2WFS7TCI">
+            <Properties>
+                <string name="Name">Calculate</string>
+            </Properties>
+            <Item class="ModuleScript" referent="RBXEO56JS88NI0QC5ARM8JAPJ7485A0C08B">
+                <Properties>
+                    <string name="Name">MSE</string>
+                    <string name="ScriptGuid">{3566b719-e9df-4aa4-a1ac-532286901f1f}</string>
+                    <ProtectedString name="Source"><![CDATA[return function(predictedOutput: { number }, expectedOutput: { number })
+	local mse = 0
+	for i = 1, #expectedOutput do
+		mse = mse + (expectedOutput[i] - predictedOutput[i])^2
+	end
+	return mse
+end]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBXO5TTUE9UO5Q19MZV8FHAAXO54ASPLMBT">
+                <Properties>
+                    <string name="Name">DiscountRewards</string>
+                    <string name="ScriptGuid">{1b522bb2-7dad-47dd-86df-1ea21676dc6f}</string>
+                    <ProtectedString name="Source"><![CDATA[return function(rewards: { number }, discountFactor: number)
+	local discounted = {}
+	
+	local summation = 0
+	for i = #rewards, 1, -1 do
+		summation = rewards[i] + discountFactor * summation
+		discounted[i] = summation
+	end
+	
+	return discounted
+end]]></ProtectedString>
+                </Properties>
+            </Item>
+            <Item class="ModuleScript" referent="RBX9MN2MT54HG3U6H2J069LO1269CMYSSB4">
+                <Properties>
+                    <string name="Name">GetHighestActionValue</string>
+                    <string name="ScriptGuid">{89085c76-6d12-431e-8a17-538a5eabdf62}</string>
+                    <ProtectedString name="Source"><![CDATA[local mathMax = math.max
+local tableFind = table.find
+
+return function(activationLayer: {})
+	local actionValue = mathMax(unpack(activationLayer))
+	local action = tableFind(activationLayer, actionValue)
+	return action, actionValue
+end]]></ProtectedString>
+                </Properties>
+            </Item>
+        </Item>
+        <Item class="Folder" referent="RBXH9M19EDOUD02JMUE1WF7W77YME50FTX8">
+            <Properties>
+                <string name="Name">Encoders</string>
+            </Properties>
+            <Item class="ModuleScript" referent="RBXO9ZF33T380Q02GGVJXR2A52T13A7DTV5">
+                <Properties>
+                    <string name="Name">OneHot</string>
+                    <string name="ScriptGuid">{8e6f883d-899e-4e1d-b814-7cf65a8b4a39}</string>
+                    <ProtectedString name="Source"><![CDATA[local OneHotEncoding = {}
+
+function OneHotEncoding.new(array: { any })
+	return setmetatable(array, { __index = OneHotEncoding })
+end
+
+local tableCreate = table.create
+local tableFind = table.find
+function OneHotEncoding:GetEncodingFromArray(array: { any })
+	local encoding = tableCreate(#self, 0)
+	for _, v in next, array do
+		encoding[tableFind(self, v)] = 1
+	end; return encoding
+end
+
+function OneHotEncoding:GetEncodingFromPosition(indexPositions: { number })
+	local encoding = tableCreate(#self, 0)
+	for i in next, indexPositions do
+		encoding[i] = 1
+	end; return encoding
+end
+
+return OneHotEncoding]]></ProtectedString>
+                </Properties>
+            </Item>
+        </Item>
+    </Item>
+</roblox>
