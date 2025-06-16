@@ -1,0 +1,95 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXLDHYWIGF8RIKPBZFHIS7I79YQK2MDXS9">
+        <Properties>
+            <string name="Name">Logs</string>
+            <string name="ScriptGuid">{7cc27fc7-aea3-43ba-a3b4-2cfa2c84f015}</string>
+            <ProtectedString name="Source"><![CDATA[local Signal = require("./Signal")
+
+local Logs = {}
+local LogMethods = {}
+
+local tableRemove = table.remove
+local tableFind = table.find
+
+function LogMethods.Continue(self: Logs, log: string)
+	local lines = log:split("\n")
+	if self[#self] then
+		self[#self] ..= lines[1]
+	else
+		self[#self + 1] = lines[1]
+	end; for i = 2, #lines do
+		self:Push(lines[i])
+	end
+	return lines
+end
+
+function LogMethods.Push(self: Logs, log: string)
+	local index = #self + 1
+	self[index] = log
+	return index
+end
+
+function LogMethods.Find(
+	self: Logs,
+	options: {
+		exact: string?,
+		startsWith: string?,
+		endsWith: string?,
+		contains: string?,
+		lowercaseExact: string?,
+		lowercaseContains: string?
+	}
+)
+	for index, log in next, self do
+		if options.exact and log == options.exact then
+			return index, log
+		elseif options.startsWith and log:sub(1, #options.startsWith) == options.startsWith then
+			return index, log
+		elseif options.endsWith and log:sub(-#options.endsWith) == options.endsWith then
+			return index, log
+		elseif options.contains and log:find(options.contains) then
+			return index, log
+		elseif options.lowercaseExact and log:lower() == options.lowercaseExact:lower() then
+			return index, log
+		elseif options.lowercaseContains and log:lower():find(options.lowercaseContains:lower()) then
+			return index, log
+		end
+	end
+end
+
+function LogMethods.RemoveIndex(self: Logs, index: number): string
+	local value = tableRemove(self, index)
+	return value
+end
+
+function LogMethods.RemoveValue(self: Logs, value: string): number
+	local index = self:Find({ exact = value })
+	if index then self:RemoveIndex(index) end
+	return index
+end
+
+function LogMethods.Clear(self: Logs)
+	local itemsCleared = #self
+	for i = 1, itemsCleared do
+		self[i] = nil
+	end
+	return itemsCleared
+end
+
+function LogMethods.Destroy(self: Logs)
+	for i in next, self do self[i] = nil end
+	setmetatable(self, {})
+	return nil
+end
+
+function Logs.new(events: boolean?)
+	return setmetatable({}, { __index = LogMethods })
+end
+
+export type Logs = typeof(Logs.new())
+
+return Logs]]></ProtectedString>
+        </Properties>
+    </Item>
+</roblox>
