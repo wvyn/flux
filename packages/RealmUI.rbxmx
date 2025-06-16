@@ -1,0 +1,414 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXU2B8N87N3809Z30MJL7YSMN1U28M392O">
+        <Properties>
+            <string name="Name">RealmUI</string>
+            <string name="ScriptGuid">{62fed99b-d1c6-4ad2-9a0b-564f74688e64}</string>
+            <ProtectedString name="Source"><![CDATA[local RealmUI = {}
+
+RealmUI.Element = require(script:WaitForChild("Element"))
+RealmUI.Canvas = require(script:WaitForChild("Canvas"))
+
+RealmUI.Resources = {
+	ObjectWrapper = require(script:WaitForChild("ObjectWrapper"))
+}
+
+local QuickAccess = {}
+function QuickAccess.CanvasWrap(class)
+	return RealmUI.Resources.ObjectWrapper.wrap(class, RealmUI.Canvas)
+end
+	
+RealmUI.QuickAccess = QuickAccess
+return RealmUI]]></ProtectedString>
+        </Properties>
+        <Item class="ModuleScript" referent="RBXGRYIJNA9ECBOQ5P8G6AV1JM7F0FA5BB5">
+            <Properties>
+                <string name="Name">Canvas</string>
+                <string name="ScriptGuid">{8f953af7-98f8-47d9-a873-785b54f921e9}</string>
+                <ProtectedString name="Source"><![CDATA[local tweenService = game:GetService("TweenService")
+
+local vector2New = Vector2.new
+local uDim2FromScale = UDim2.fromScale
+local uDim2FromOffset = UDim2.fromOffset
+
+local vector2Zero = Vector2.zero
+
+local atan2 = math.atan2
+local deg = math.deg
+
+local Canvas = {}
+
+local CanvasEnum = {}
+Canvas.Enum = CanvasEnum
+
+type CanvasType = typeof(Canvas)
+
+do -- Tweening
+	function Canvas:CreateTween(tweenInfo, propertyTable)
+		return tweenService:Create(self(), tweenInfo, propertyTable)
+	end 
+end
+
+do -- Alignment
+	type CanvasAlignment = { number }
+	CanvasEnum.CanvasAlignment = {
+		TopLeft = { 0, 0 } :: CanvasAlignment,
+		TopCenter = { 0.5, 0 } :: CanvasAlignment,
+		TopRight = { 1, 0 } :: CanvasAlignment,
+
+		Left = { 0, 0.5 } :: CanvasAlignment,
+		Center = { 0.5, 0.5 } :: CanvasAlignment,
+		Right = { 1, 0.5 } :: CanvasAlignment,
+
+		BottomLeft = { 0, 1 } :: CanvasAlignment,
+		BottomCenter = { 0.5, 1 } :: CanvasAlignment,
+		BottomRight = { 1, 1 } :: CanvasAlignment,
+	}
+
+	function Canvas:AlignTo(canvasAlignment: CanvasAlignment)
+		local x, y = canvasAlignment[1], canvasAlignment[2]
+		self.AnchorPoint = vector2New(x, y)
+		self.Position = uDim2FromScale(x, y)
+		return self
+	end
+end
+
+do -- Quick Set
+	function Canvas:SetSizeScale(scaleX: number, scaleY: number)
+		self.Size = uDim2FromScale(scaleX, scaleY)
+		return self
+	end
+
+	function Canvas:SetSizeOffset(offsetX: number, offsetY: number)
+		self.Size = uDim2FromOffset(offsetX, offsetY)
+		return self
+	end
+end
+
+do -- Hovering Objects
+	function Canvas:IsPositionOverCanvas(position: Vector2)
+		local absolutePosition = self.AbsolutePosition
+		local absoluteSize = self.AbsoluteSize
+
+		local tx = absolutePosition.X
+		local ty = absolutePosition.Y
+
+		local bx = tx + absoluteSize.X
+		local by = ty + absoluteSize.Y
+
+		local px = position.X
+		local py = position.Y
+
+		if px >= tx and py >= ty and px <= bx and py <= by then
+			return true
+		end
+	end
+
+	function Canvas:GetGuiObjectsAtPosition(guiObjects: {}): { GuiObject }
+		local objects = {}
+		for _, object in next, guiObjects do
+			if object:IsA("GuiObject") then
+				if self:IsPositionOverCanvas(object) then
+					table.insert(objects, object)
+				end
+			end
+		end
+		return objects
+	end
+end
+
+do -- Conversion
+	function Canvas:Vector2ToUDim2(vector2: Vector2)
+		return uDim2FromOffset(vector2.X, vector2.Y)
+	end
+end
+
+do -- Quick Object Get
+	function Canvas:GetOffsetFromPosition(position: Vector2)
+		return self:GetAnchorPointOffsetPosition() - position
+	end
+
+	function Canvas:GetOffsetFromAnchorPoint()
+		return (self.AbsoluteSize :: Vector2) * (self.AnchorPoint :: Vector2)
+	end
+
+	function Canvas:GetOffsetFromCenter()
+		return (self.AbsoluteSize :: Vector2)/2
+	end
+
+	function Canvas:GetAnchorPointOffsetPosition()
+		return (self.AbsolutePosition :: Vector2) + self:GetOffsetFromAnchorPoint()
+	end
+
+	function Canvas:GetCenterAbsolutePosition()
+		return (self.AbsolutePosition :: Vector2) + self:GetOffsetFromCenter()
+	end
+
+	function Canvas:GetScalePosition(stack: number): Vector2
+		return self.AbsolutePosition/self:GetGuiObjectAncestor(stack).AbsolutePosition
+	end
+
+	function Canvas:GetScaleSize(stack: number): Vector2
+		return self.AbsoluteSize/self:GetGuiObjectAncestor(stack).AbsoluteSize
+	end
+
+	function Canvas:GetCenterOffsetPosition(stack: (number | GuiObject)?)
+		local parent
+		if typeof(stack) == "Instance" then
+			parent = stack
+		else
+			parent = self:GetGuiObjectAncestor(stack)
+		end
+
+		return (self.AbsolutePosition - parent.AbsolutePosition) :: Vector2 + self:GetOffsetFromCenter()
+	end
+end
+
+do -- Get Basic
+	function Canvas:GetScreenSize()
+		return workspace.CurrentCamera.ViewportSize
+	end
+
+	function Canvas:GetGuiObjectAncestor(stack: number?, start: Instance?)
+		local parent = (start or self):FindFirstAncestorWhichIsA("GuiObject")
+		for _ = 1, (stack or 0) - 1 do parent = parent:FindFirstAncestorWhichIsA("GuiObject") end
+		return parent
+	end
+
+	function Canvas:GetInstance()
+		return self()
+	end
+end
+
+do -- Shifting
+	function Canvas:ShiftPosition(shiftPosition: UDim2)
+		local newPosition = self.Position + shiftPosition
+		self.Position = newPosition
+		return newPosition
+	end
+
+	function Canvas:ShiftSize(shiftSize: UDim2)
+		local newSize = self.Size + shiftSize
+		self.Size = newSize
+		return newSize
+	end
+
+	function Canvas:ShiftZIndex(shift: number?): number
+		local newZIndex = self.ZIndex + (shift or 1)
+		self.ZIndex = newZIndex
+		return newZIndex
+	end
+end
+
+do -- Column List
+	function Canvas:GetColumnListFixedPosition(itemIndex: number, maxItemIndex: number)
+		return itemIndex - (maxItemIndex + 1)/2
+	end
+
+	function Canvas:GetColumnListScalePosition(itemIndex: number, maxItemIndex: number)
+		return (itemIndex - (maxItemIndex + 1)/2)/(maxItemIndex - 1)
+	end
+
+	function Canvas:ForObjectGetColumnListScalePosition(itemIndex: number, maxItemIndex: number, margin: number?, columnList: GuiObject?)
+		return 0.5 + self:GetColumnListScalePosition(itemIndex, maxItemIndex) * (margin and (1 - (margin/(columnList or self:GetGuiObjectAncestor()).AbsoluteSize.Y)) or 1)
+	end
+end
+
+do -- Drawing
+	type DrawLinesType = {}
+	CanvasEnum.DrawLinesType = {
+		Linear = "Linear" :: DrawLinesType,
+		Connected = "Connected" :: DrawLinesType,
+		ConnectedSingle = "ConnectedSingle" :: DrawLinesType,
+	}
+
+	function Canvas:GetLineData(startingPixel: Vector2, endingPixel: Vector2)
+		local difference = endingPixel - startingPixel
+		return (startingPixel + endingPixel)/2, deg(atan2(difference.Y, difference.X)), difference
+	end
+
+	function Canvas:DrawLine(startingPixel: Vector2, endingPixel: Vector2)
+		local targetPosition, rotation, difference = self:GetLineData(startingPixel, endingPixel)
+		self.Position = uDim2FromOffset(targetPosition.X, targetPosition.Y)
+		self.Size = uDim2FromOffset(difference.Magnitude, self.AbsoluteSize.Y)
+		self.Rotation = rotation
+		return self
+	end
+
+	function Canvas:SwiftDrawLines(guiObjects: { GuiObject & CanvasType }, startingPixels: { Vector2 | ( GuiObject & CanvasType) }?, endingPixels: Vector2 | { Vector2 }, drawLinesType: DrawLinesType?, parentAbsolutePosition: Vector2?)
+		if not startingPixels then
+			startingPixels = {}
+			for i = 1, #guiObjects do
+				startingPixels[i] = guiObjects[i]:GetCenterAbsolutePosition() 
+			end
+		elseif typeof(startingPixels[1]) ~= "Vector2" then
+			for i = 1, #startingPixels do
+				startingPixels[i] = startingPixels[i]:GetCenterAbsolutePosition()
+			end
+		end
+
+		local typeofEndingPixels = typeof(endingPixels)
+		if typeofEndingPixels == "Vector2" then
+			drawLinesType = "ConnectedSingle"
+		elseif not drawLinesType then
+			drawLinesType = "Linear"	
+		end
+
+		if typeofEndingPixels == "table" and typeof(endingPixels[1]) ~= "Vector2" then
+			for i = 1, #endingPixels do
+				endingPixels[i] = endingPixels[i]:GetCenterAbsolutePosition()
+			end
+		end
+
+		if drawLinesType == "Connected" then
+			local isConnectedSingle = drawLinesType == "ConnectedSingle"
+			local numberOfStartingPixels = #startingPixels
+			for startIndex = 1, numberOfStartingPixels do
+				for endingIndex = 1, #endingPixels do
+					local object = guiObjects[(startIndex - 1) * numberOfStartingPixels + endingIndex]
+
+					local startingPixel = startingPixels[startIndex] - (parentAbsolutePosition or object:GetGuiObjectAncestor().AbsolutePosition)
+
+					local target: Vector2 = isConnectedSingle and endingPixels or endingPixels[endingIndex]
+					local endingPixel = target - (parentAbsolutePosition or object:GetGuiObjectAncestor().AbsolutePosition)
+					object:DrawLine(startingPixel, endingPixel)
+				end
+			end	
+		else
+			local isConnectedSingle = drawLinesType == "ConnectedSingle"
+			for i = 1, #startingPixels do
+				local object = guiObjects[i]
+
+				local target: Vector2 = isConnectedSingle and endingPixels or endingPixels[i]
+				local startingPixel = startingPixels[i] - (parentAbsolutePosition or object:GetGuiObjectAncestor().AbsolutePosition)
+
+				local endingPixel = target - (parentAbsolutePosition or object:GetGuiObjectAncestor().AbsolutePosition)
+				object:DrawLine(startingPixel, endingPixel)
+			end	
+		end
+
+		return self
+	end
+end
+
+do -- Moving
+	function Canvas:MassMoveTo(guiObjects: { GuiObject & CanvasType }, positions: UDim2 | { UDim2 | GuiObject })
+		if typeof(positions) ~= "UDim2" then
+			for i = 1, #guiObjects do
+				local position = positions[i]
+				if typeof(position) ~= "UDim2" then
+					position = position.AbsolutePosition + position.AbsoluteSize/2
+				end
+
+				local targetPosition = position - guiObjects[i].AbsolutePosition
+				local parent = self:GetGuiObjectAncestor()
+				guiObjects[i].Position = self:Vector2ToUDim2(targetPosition - (parent and parent.AbsolutePosition or vector2Zero))
+			end
+		else
+			for i = 1, #guiObjects do
+				local targetPosition = positions - guiObjects[i].AbsolutePosition
+				local parent = self:GetGuiObjectAncestor()
+				guiObjects[i].Position = self:Vector2ToUDim2(targetPosition - (parent and parent.AbsolutePosition or vector2Zero))
+			end
+		end
+		return self
+	end
+
+	type MoveToObjectCenter = {}
+	CanvasEnum.MoveToObjectTargetMode = {
+		SingleTarget = "SingleTarget" :: MoveToObjectCenter,
+		MultipleTargets = "MultipleTargets" :: MoveToObjectCenter
+	}
+
+	function Canvas:MassMoveToObjectCenter(guiObjects: { GuiObject & CanvasType }, targetObjects: GuiObject | { GuiObject }, targetMode: MoveToObjectTargetMode?)
+		local isSingleTarget = targetMode == "SingleTarget"
+		for i = 1, #guiObjects do
+			local object = guiObjects[i]
+			local targetObject = isSingleTarget and targetObjects or targetObjects[i]
+			local position = targetObjects[i].AbsolutePosition + targetObject.AbsoluteSize/2
+			local targetPosition = position - object.AbsolutePosition
+			local parent = self:GetGuiObjectAncestor()
+			object.Position = self:Vector2ToUDim2(targetPosition - (parent and parent.AbsolutePosition or vector2Zero))
+		end
+		return self
+	end
+
+
+	function Canvas:MassCanvasFunctionCall(functionName: string, guiObjects: { GuiObject & CanvasType }, ...)
+		for i = 1, #guiObjects do
+			local object = guiObjects[i]
+			object[functionName](object, ...)
+		end
+	end
+end
+
+return Canvas]]></ProtectedString>
+            </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="RBXSK5TJ62U9VRBWHWMQUS42GE59I0FU0KG">
+            <Properties>
+                <string name="Name">Element</string>
+                <string name="ScriptGuid">{de4f6298-59fa-477f-b061-6ff814d531dc}</string>
+                <ProtectedString name="Source"><![CDATA[local Element = {}
+
+Element.new = function(className: string, properties: {}?)
+	local class = Instance.new(className)
+	if properties then
+		for propertyName, propertyValue in next, properties do
+			class[propertyName] = propertyValue
+		end
+	end; return class
+end :: typeof(Instance.new)
+
+return Element]]></ProtectedString>
+            </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="RBXFW6OL0GXVW0DFELIO8J4NUSCW2JZFVDL">
+            <Properties>
+                <string name="Name">ObjectWrapper</string>
+                <string name="ScriptGuid">{b1b4af03-7b93-439d-b650-4f1ee505fb26}</string>
+                <ProtectedString name="Source"><![CDATA[local ObjectWrapper = {}
+
+function ObjectWrapper.wrap<objectType, wrapperType>(object: objectType, wrapper: wrapperType): (objectType & wrapperType) & (() -> objectType)
+	return setmetatable({}, {
+		__index = function(metaWrapper, index)
+			local wrapperGet = rawget(wrapper, index)
+			if wrapperGet then 
+				local typeOfProperty = typeof(wrapperGet)
+				if typeOfProperty == "function" then
+					return function(...)
+						return wrapperGet(metaWrapper, select(2, ...))
+					end
+				else
+					return wrapperGet
+				end
+			else
+				local property = object[index]
+				local typeOfProperty = typeof(property)
+				if typeOfProperty == "function" then
+					return function(...)
+						return property(object, select(2, ...))
+					end
+				else
+					return property
+				end
+			end
+		end,
+
+		__newindex = function(_, index, value)
+			xpcall(function()
+				object[index] = value
+			end, function()
+				wrapper[index] = value
+			end)
+		end,
+
+		__call = function() return object end
+	})
+end
+
+return ObjectWrapper]]></ProtectedString>
+            </Properties>
+        </Item>
+    </Item>
+</roblox>
