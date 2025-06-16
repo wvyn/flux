@@ -1,0 +1,111 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXN5DX8RTPI35FV5M0ZVJC8K0V2FPD40E3">
+        <Properties>
+            <string name="Name">GerstnerWave</string>
+            <string name="ScriptGuid">{eaf95dce-8737-4011-a445-f2fbb28b5744}</string>
+            <ProtectedString name="Source"><![CDATA[local GerstnerWave = {
+	WaveInfo = {},
+	System = {}
+}
+
+type WaveInfo = { any }
+
+local tableInsert = table.insert
+
+local twoPi = 2 * math.pi
+
+local sqrt = math.sqrt
+local cos = math.cos
+local sin = math.sin
+local atan2 = math.atan2
+
+local vector3New = Vector3.new
+local vector3Zero = Vector3.zero
+local vector3XAxis = Vector3.xAxis
+local vector3ZAxis = Vector3.zAxis
+
+local vector2New = Vector2.new
+
+function GerstnerWave.WaveInfo.new( direction: Vector2, waveLength: number, steepness: number, gravity: number ): WaveInfo
+	return {
+		direction or vector3New(1, 0),
+		waveLength or 100,
+		steepness or 0.3,
+		gravity or 9.8
+	}
+end
+
+function GerstnerWave:GetTransform( waves: { WaveInfo }, position: Vector2, runTime: number )
+	local transform = vector3Zero
+
+	for _, wave: WaveInfo in next, waves do
+		transform += GerstnerWave.System:CalculateTransform(position, runTime, false, GerstnerWave.System:CalculateWave(unpack(wave)))
+	end
+
+	return transform
+end
+
+function GerstnerWave:GetHeightAndNormal( waves: { WaveInfo }, position: Vector2, runTime: number )
+	local transform = vector3Zero
+	local tangent = vector3XAxis
+	local binormal = vector3ZAxis
+
+	for _, wave: WaveInfo in next, waves do
+		local resultTransform, resultTangent, resultBiNormal = GerstnerWave.System:CalculateTransform(position, runTime, true, GerstnerWave.System:CalculateWave(unpack(wave)))
+
+		transform += resultTransform
+		tangent += resultTangent
+		binormal += resultBiNormal
+	end
+
+	return transform, tangent, binormal
+end
+
+function GerstnerWave:GetRotationAngle(transform1: Vector3, transform2: Vector3, rotationFactor: number)
+	return atan2((transform1 - transform2).Y, rotationFactor)
+end
+
+function GerstnerWave.System:CalculateWave(...)
+	local _, waveLength, steepness, gravity = ...
+
+	local waveNumber = twoPi/waveLength
+	local waveSpeed = sqrt(gravity/waveNumber)
+	local waveAmplitude = steepness/waveNumber
+
+	return waveNumber, waveSpeed, waveAmplitude, ...
+end
+
+function GerstnerWave.System:CalculateTransform(
+	position: Vector2,
+	runTime: number,
+	calculateNormals: boolean,
+	waveNumber: number,
+	waveSpeed: number,
+	waveAmplitude: number,
+	waveDirection: Vector2,
+	_, 
+	steepness: number
+)
+	local wavePhase = waveNumber * (waveDirection:Dot(vector2New(position.X, position.Y)) - waveSpeed * runTime)
+
+	local cosf = cos(wavePhase)
+	local sinf = sin(wavePhase)
+
+	local tangent, binormal
+	if calculateNormals then
+		local steepSinF = (steepness * sinf)
+		local directionX = waveDirection.X
+		local directionY = waveDirection.Y
+
+		tangent = vector3New(-directionX * directionX * steepSinF, directionX * (steepness * cosf), -directionX * directionY * steepSinF)
+		binormal = vector3New(-directionY * directionY * steepSinF, directionY * (steepness * cosf), -directionY * directionY * steepSinF)
+	end
+
+	return vector3New(waveDirection.X * (waveAmplitude * cosf), waveAmplitude * sinf, waveDirection.Y * (waveAmplitude * cosf)), tangent, binormal
+end
+
+return GerstnerWave]]></ProtectedString>
+        </Properties>
+    </Item>
+</roblox>
