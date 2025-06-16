@@ -1,0 +1,1189 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXXR17WXL2EGA8766H35CZKND2WI8TL330">
+        <Properties>
+            <string name="Name">InteractiveMidi</string>
+            <string name="ScriptGuid">{264c5c12-a127-44ec-a98a-3bb3722f96fe}</string>
+            <ProtectedString name="Source"><![CDATA[local ByteRealm = require(script.ByteRealm)
+
+local stringFormat = string.format
+local stringSub = string.sub
+local stringFind = string.find
+local stringSplit = string.split
+
+local pow = math.pow
+local floor = math.floor
+local abs = math.abs
+
+local tableClear = table.clear
+local tableInsert = table.insert
+local tableClone = table.clone
+local tablePack = table.pack
+local tableConcat = table.concat
+
+local InteractiveMidi = {}
+
+local References = {}
+local MidiClasses = {}
+
+local InstructionEventData = {
+	SystemExclusive = { "Text" },
+	TuneRequest = {},
+	SongSelect = {},
+	SongPosition = { "LSB", "MSB" },
+	SequencerSpecific = { "Text" },
+	
+	KeySignature = { "Signature", "RelativeKey" },
+	TimeSignature = { "Numerator", "Denominator", "ClockInMetronome", "Notated32ndNotesInQuarter" },
+	
+	SMPTEOffset = { "Hours", "Minutes", "Seconds", "Frames", "FractionalFrames" },
+	SetTempo = { "Tempo" },
+	
+	SetSequenceNumber = { "SequenceNumber" },
+	EndOfTrack = {},
+	
+	ChannelPrefix = { "Channel" },
+	
+	TextEvent = { "Text" },
+	CopyrightText = { "Text" },
+	TrackName = { "Text" },
+	InstrumentName = { "Text" },
+	Lyric = { "Text" },
+	Marker = { "Text" },
+	CuePoint = { "Text" },
+	
+	NoteOn = { "Channel", "NoteNumber", "Velocity" },
+	NoteOff = { "Channel", "NoteNumber", "Velocity" },
+	
+	AfterTouchPoly = { "NoteNumber", "Touch" },
+	ProgramChange = { "Channel", "PatchNumber" },
+	ControlChange = { "ControllerNumber", "ControlChange" },
+	AfterTouchChannel = { "Pressure" },
+	PitchWheel = { "PitchBendLSB", "PitchBendMSB" },
+}
+
+local InstructionEventBytes = {
+	-- Meta-Events --
+	["F7"] = { "SystemExclusive", { "LENGTH" }, IsMetaEvent = true },
+	["F6"] = { "TuneRequest", {}, IsMetaEvent = true },
+	["F3"] = { "SongSelect", {}, IsMetaEvent = true },
+	["F2"] = { "SongPosition", { 2, 2 }, IsMetaEvent = true },
+	["F0"] = { "SystemExclusive", { "LENGTH" }, IsMetaEvent = true },
+	
+	["7F"] = { "SequencerSpecific", { "LENGTH" }, IsMetaEvent = true },
+	
+	["59"] = { "KeySignature", { 2, 2 }, IsMetaEvent = true },
+	["58"] = { "TimeSignature", { 2, 2, 2, 2 }, IsMetaEvent = true },
+	
+	["54"] = { "SMPTEOffset", { 2, 2, 2, 2, 2 }, IsMetaEvent = true },
+	["51"] = { "SetTempo", { 6 }, IsMetaEvent = true },
+	
+	["00"] = { "SetSequenceNumber", { 2 }, IsMetaEvent = true },
+	["2F"] = { "EndOfTrack", {}, IsMetaEvent = true },
+	
+	["20"] = { "ChannelPrefix", { 2 }, IsMetaEvent = true },
+	["21"] = { "CopyrightText", { "LENGTH" }, IsMetaEvent = true },
+	
+	-- Text Events --
+	["01"] = { "TextEvent", { "LENGTH" }, IsMetaEvent = true },
+	["02"] = { "CopyrightText", { "LENGTH" }, IsMetaEvent = true },
+	["03"] = { "TrackName", { "LENGTH" }, IsMetaEvent = true },
+	["04"] = { "InstrumentName", { "LENGTH" }, IsMetaEvent = true },
+	["05"] = { "Lyric", { "LENGTH" }, IsMetaEvent = true },
+	["06"] = { "Marker", { "LENGTH" }, IsMetaEvent = true },
+	["07"] = { "CuePoint", { "LENGTH" }, IsMetaEvent = true },
+	
+	-- Reserved/Unassigned Text Events --
+	["08"] = { "TextEvent", { "LENGTH" }, IsMetaEvent = true },
+	["09"] = { "TextEvent", { "LENGTH" }, IsMetaEvent = true },
+	["0A"] = { "TextEvent", { "LENGTH" }, IsMetaEvent = true },
+	["0B"] = { "TextEvent", { "LENGTH" }, IsMetaEvent = true },
+	["0C"] = { "TextEvent", { "LENGTH" }, IsMetaEvent = true },
+	["0D"] = { "TextEvent", { "LENGTH" }, IsMetaEvent = true },
+	["0E"] = { "TextEvent", { "LENGTH" }, IsMetaEvent = true },
+	["0F"] = { "TextEvent", { "LENGTH" }, IsMetaEvent = true },
+	
+	-- Midi-Events --
+	["9"] = { "NoteOn", { 2, 2 } },
+	["8"] = { "NoteOff", { 2, 2 } },
+	
+	["A"] = { "AfterTouchPoly", { 2, 2 } },
+	["B"] = { "ControlChange", { 2, 2 } },
+	["C"] = { "ProgramChange", { 2 } },
+	["D"] = { "AfterTouchChannel", { 2 } },
+	["E"] = { "PitchWheel", { 2, 2 } }
+}
+
+for _, eventData in next, InstructionEventData do
+	tableInsert(eventData, 1, "DeltaTime")
+	tableInsert(eventData, 1, "TrackNumber")
+end
+
+InteractiveMidi.References = References
+
+local function deepCopy(original, dump)
+	local copy = dump or {}
+	for k, v in next, original do
+		if type(v) == "table" then
+			v = deepCopy(v)
+		end
+		copy[k] = v
+	end
+	return copy
+end
+
+local decimalToHexZeros = function(decimal, length)
+	return ByteRealm:FillHex(stringFormat("%X", decimal), length)
+end
+
+local insert = function(t, ...)
+	tableInsert(t, ...)
+	return t
+end
+
+local pack = function(...)
+	local packed = tablePack(...)
+	packed.n = nil
+	return packed
+end
+
+local assignProperty = function(table1, table2)
+	local newPack = {}
+	for i, index in next, table1 do
+		newPack[index] = table2[i]
+	end; return newPack
+end
+
+local FormatEvent = function(eventType: string, instruction: {}, trackNumber: number)
+	return InstructionEventData[eventType] and assignProperty(InstructionEventData[eventType], insert(tableClone(instruction), 1, trackNumber)) or instruction
+end
+
+References.FormatEvent = FormatEvent
+
+References.Classes = MidiClasses
+References.InstructionEventData = InstructionEventData
+References.InstructionEventBytes = InstructionEventBytes
+
+References.DeltaTimeToHex = function(deltaTime)
+	local Hex = ""
+	local pointer = 1
+	local result = ""
+
+	while true do
+		local statusByteDecimal = deltaTime % 128
+		deltaTime = floor(deltaTime / 128)
+
+		if statusByteDecimal > 0 then
+			statusByteDecimal = statusByteDecimal + 128
+		end
+
+		result = stringFormat("%02X%s", statusByteDecimal, result)
+
+		if deltaTime == 0 then
+			break
+		end
+	end
+
+	return result
+end
+
+References.HexToDeltaTime = function(Hex, pointer)
+	local deltaTime = 0
+	while true do
+		local statusByteHex = stringSub(Hex, pointer, pointer + 1)
+		local statusByteDecimal = tonumber(statusByteHex, 16)
+		deltaTime = deltaTime + (statusByteDecimal % 128)
+		pointer = pointer + 2
+
+		if statusByteDecimal < 127.5 then
+			break
+		end
+
+		deltaTime = deltaTime * 128
+	end
+
+	return deltaTime
+end
+
+References.TempoTimeConstant = function(timePosition, newTimePosition)
+	return newTimePosition == timePosition and 1 or timePosition/newTimePosition
+end
+
+References.TempoToBeatsPerMinute = function(tempo)
+	return 60000000/tempo
+end
+
+References.BeatsPerMinuteToTempo = References.TempoToBeatsPerMinute
+
+References.TicksToSeconds = function(ticks, tempo, pulsesPerQuarter)
+	return (ticks * tempo)/(pulsesPerQuarter * 1000000)
+end
+
+References.SecondsToTicks = function(seconds, tempo, pulsesPerQuarter)
+	return (seconds * (pulsesPerQuarter * 1000000))/tempo
+end
+
+References.NoteNumberToPitch = function(noteNumber: number, offset: number)
+	return ((440 / 32) * pow(2, ((noteNumber + offset) / 12)) / 440)*8
+end
+
+References.NoteNumberToNoteName = function(noteNumber)
+	local notes = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
+	local octave = floor((noteNumber - 12) / 12)
+	local noteIndex = (noteNumber - 12) % 12 + 1
+	local noteName = notes[noteIndex]
+	return noteName, octave
+end
+
+MidiClasses.Player = function()
+	local Player = {
+		IsPlayer = true,
+		IsPlaying = false,
+		
+		TimePosition = 0,
+		LastTimePosition = 0,
+		
+		TempoTimePosition = 0,
+		TempoTimeConstant = 1,
+		
+		Loop = false,
+		TimeMultiplier = 1,
+		SyncingThreshold = 1,
+		
+		TimeLength = 0,
+		Tempo = References.BeatsPerMinuteToTempo(120),
+		IsTempoSet = false,
+		
+		Memory = {},
+		Events = {},
+		EndOfTracks = {},
+		InstructionProgress = {},
+		
+		Heartbeat = nil,
+		
+		SyncingDifference = 0,
+		Syncing = nil,
+		Loaded = nil
+	}
+	
+	function Player:GetSongLength()
+		local MidiClass = Player.Loaded
+		if MidiClass then
+			if MidiClass.ParseType == "Summation" then
+				local currentTempo = Player.Tempo
+				local longestTime = 0
+				for trackNumber, trackInstructions in next, MidiClass.Instructions do
+					local lastDeltaTime = 0
+					local totalTime = 0
+					for instructionIndex, instruction in next, trackInstructions do
+						local deltaTime = instruction[2] - lastDeltaTime
+						totalTime += (deltaTime * currentTempo)/(MidiClass.Header.PulsesPerQuarter * 1000000)
+						lastDeltaTime = instruction[2]
+						if instruction[1] == "SetTempo" then
+							currentTempo = instruction[3]
+						end
+					end; if totalTime > longestTime then
+						longestTime = totalTime
+					end
+				end
+				
+				Player.TimeLength = longestTime
+			end
+		end
+		
+		return Player
+	end
+	
+	function Player:Load(MidiClass)
+		if MidiClass.IsParser then
+			Player.Loaded = MidiClass
+		end
+		
+		Player:GetSongLength()
+		
+		return Player
+	end
+	
+	function Player:FireEvent(EventName, ...)
+		if Player.Events[EventName] then
+			task.spawn(Player.Events[EventName], ...)
+		end
+		
+		return Player
+	end
+	
+	function Player:SetTempo(tempo)
+		if not Player.IsTempoSet then Player.Tempo = tempo end
+		local MidiClass = Player.Loaded
+		local timeInSeconds = Player.TimePosition
+		local deltaTime = References.SecondsToTicks(timeInSeconds, Player.Tempo, MidiClass.Header.PulsesPerQuarter)
+		local newTimePosition = (deltaTime * tempo)/(MidiClass.Header.PulsesPerQuarter * 1000000) 
+		Player.TempoTimeConstant *= newTimePosition == timeInSeconds and 1 or timeInSeconds/newTimePosition
+		Player.Tempo = tempo
+		local timeDifference = (timeInSeconds * Player.TempoTimeConstant^-1) - timeInSeconds
+		Player.TempoTimePosition = timeDifference
+		return Player
+	end
+	
+	function Player:HeartbeatStep(MidiClass, heartBeatDeltaTime)
+		local SyncingDistance = Player.Syncing and Player.Syncing.TimePosition - Player.TimePosition
+		if SyncingDistance then
+			local SyncingDifference = SyncingDistance and abs(SyncingDistance)
+			if SyncingDifference > Player.SyncingThreshold then
+				Player.TimePosition = Player.Syncing.TimePosition
+				Player.LastTimePosition = Player.Syncing.LastTimePosition
+				Player:FireEvent("SyncingCorrecting", { SyncingDifference = SyncingDistance })
+			end
+			
+			Player.SyncingDifference = SyncingDistance
+		end
+		
+		Player.LastTimePosition = Player.TimePosition
+		Player.TimePosition += heartBeatDeltaTime * Player.TimeMultiplier
+		
+		if #Player.EndOfTracks == #MidiClass.Instructions or Player.TimePosition >= Player.TimeLength then
+			if Player.Loop then
+				Player:FireEvent("Looping")
+				Player:SetTimePosition(0)
+				Player:Play()
+				return
+			else
+				return Player:Stop()
+			end
+		end
+
+		for trackNumber, trackInstructions in next, MidiClass.Instructions do
+			if not Player.InstructionProgress[trackNumber] then Player.InstructionProgress[trackNumber] = 0 end
+			for instructionIndex, instruction in next, trackInstructions do
+				local deltaTime = instruction[2]
+				local timeInSeconds = ((deltaTime * Player.Tempo)/(MidiClass.Header.PulsesPerQuarter * 1000000))
+				if Player.TimePosition + Player.TempoTimePosition >= timeInSeconds and Player.LastTimePosition + Player.TempoTimePosition <= timeInSeconds then
+					if instructionIndex < Player.InstructionProgress[trackNumber] then
+						Player:FireEvent("Error", {
+							TrackNumber = trackNumber,
+							Message = `Instruction #{instructionIndex} jumped backwards.`,
+							Code = 4
+						})
+					elseif instructionIndex > Player.InstructionProgress[trackNumber] + 1 then
+						Player:FireEvent("Error", {
+							TrackNumber = trackNumber,
+							Message = `Instruction #{instructionIndex} jumped forwards.`,
+							Code = 5
+						})
+					end
+					
+					Player.InstructionProgress[trackNumber] = instructionIndex
+					if instruction[1] == "SetTempo" then
+						Player:SetTempo(instruction[3])
+						if not Player.IsTempoSet then
+							Player.IsTempoSet = instruction[3]
+						end
+					elseif instruction[1] == "EndOfTrack" then
+						table.insert(Player.EndOfTracks, trackNumber)
+					end
+					
+					local formattedData = FormatEvent(instruction[1], pack(unpack(instruction, 2)), trackNumber)
+					formattedData.Instruction = instruction[1]
+					
+					Player:FireEvent(instruction[1], formattedData)
+					Player:FireEvent("OnInstruction", formattedData)
+				end
+			end
+		end
+		
+		Player:FireEvent("Stepped")
+		
+		return Player
+	end
+	
+	function Player:SetTimePosition(timePosition: number)
+		Player.TimePosition = timePosition
+		Player.LastTimePosition = timePosition
+	end
+	
+	function Player:Sync(TargetPlayer)
+		if Player.IsPlayer then
+			Player.Syncing = TargetPlayer
+			for PropertyIndex, PropertyValue in next, TargetPlayer do
+				if table.find({"Heartbeat", "Events"}, PropertyIndex) or typeof(PropertyValue) == "function" then continue end
+				Player[PropertyIndex] = PropertyValue
+			end
+
+			if Player.IsPlaying then
+				Player:Play()
+			end
+		end
+		
+		return Player
+	end
+	
+	function Player:Desync()
+		Player.Syncing = nil
+		Player.SyncingDifference = 0
+		return Player
+	end
+	
+	function Player:Stop()
+		if Player.Heartbeat then
+			Player:FireEvent("Stopped")
+		end
+		
+		Player.IsPlaying = false
+		Player:Pause()
+		table.clear(Player.EndOfTracks)
+		table.clear(Player.InstructionProgress)
+		Player.IsTempoSet = false
+		Player.Tempo = References.BeatsPerMinuteToTempo(120)
+		Player.TimePosition = 0
+		Player.LastTimePosition = 0
+		Player.TempoTimePosition = 0
+		Player.TempoTimeConstant = 1
+	end
+	
+	function Player:Pause()
+		Player.IsPlaying = false
+		if Player.Heartbeat then
+			Player:FireEvent("Paused")
+			Player.Heartbeat:Disconnect()
+			Player.Heartbeat = nil
+		end
+	end
+	
+	function Player:Play()
+		local MidiClass = Player.Loaded
+		if MidiClass.ParseType == "Default" then
+
+		elseif MidiClass.ParseType == "Summation" then
+			Player.IsPlaying = true
+			if Player.Heartbeat then
+				Player.Heartbeat:Disconnect()
+			end
+			
+			Player.Heartbeat = game:GetService("RunService").Heartbeat:Connect(function(deltaTime)
+				Player:HeartbeatStep(MidiClass, deltaTime)
+			end)
+			
+			Player:FireEvent("Playing")
+		end
+		
+		return Player
+	end
+	
+	return Player
+end
+
+MidiClasses.Parser = function()
+	local Parser = {
+		IsParser = true,
+		WaitEvery = false,
+		WaitTime = 0,
+		Tracks = {},
+		Instructions = {},
+		Events = {}
+	} 
+
+	function Parser:Load(Midi)
+		Parser = setmetatable(Parser, { __index = Midi })
+		return Parser
+	end
+
+	function Parser:Parse(ParseType: string)
+		local Hex = Parser.Raw.Hex
+		
+		Parser.ParseType = ParseType or "Default"
+
+		local previousTrackEnd = 0
+		for trackNumber = 1, Parser.Header.NumberOfTracks do
+			_, previousTrackEnd = stringFind(Hex, "4D54726B", previousTrackEnd)
+			if previousTrackEnd then
+				insert(Parser.Tracks, { previousTrackEnd + 1, tonumber(stringSub(Hex, previousTrackEnd + 1, previousTrackEnd + 8), 16), 8, {} }) -- { TrackStart, TrackLength, Pointer, Memory }
+			else
+				error(`Number of Tracks did not match decimal of Bytes on TrackData, ended at Track #{trackNumber}`)
+			end
+		end
+		
+		local function FireEvent(EventName: string, instruction)
+			if Parser.Events[EventName] then
+				if InstructionEventData[EventName] then
+					task.spawn(Parser.Events[EventName], FormatEvent(EventName, pack(select(2, unpack(tableClone(instruction))))))
+				else
+					task.spawn(Parser.Events[EventName], instruction)
+				end
+			end
+		end
+
+		for trackNumber, trackData in next, Parser.Tracks do
+			Parser.Instructions[trackNumber] = {}
+			if ParseType == "Summation" then
+				trackData.DeltaSummation = 0
+			end
+		end
+
+		local ParseCounter = 0
+		local EventCodes = {  }
+		repeat
+			local EndOfTrack = true
+			for trackNumber, trackData in next, Parser.Tracks do
+				if not EventCodes[trackNumber] then EventCodes[trackNumber] = -1 end
+				if trackData[4].EndOfTrack or trackData[4].Exit then continue else EndOfTrack = false end				
+				
+				local pointer = trackData[1] + trackData[3]
+				local _startingPointer = pointer
+				
+				-- Calculate DeltaTime and new Pointer position
+				local deltaTime = 0
+				while true do
+					local statusByteDecimal = tonumber(stringSub(Hex, pointer, pointer + 1), 16)
+					deltaTime += statusByteDecimal%128
+					if statusByteDecimal < 127.5 then
+						pointer += 2
+						break
+					end
+					if pointer >= #Hex then
+						deltaTime = 0
+						pointer = _startingPointer
+						FireEvent("Error", {
+							TrackNumber = trackNumber,
+							Message = `No end of Delta-Time found {stringSub(Hex, pointer, pointer + 1)}`,
+							Pointer = pointer,
+							SurroundingBytes = stringSub(Hex, pointer - 6, pointer + 3),
+							Code = 3
+						})
+						break
+					end
+					
+					pointer += 2
+					deltaTime *= 128
+				end
+
+				local deltaTimeBeforeParse = deltaTime
+				if ParseType == "Summation" then
+					trackData.DeltaSummation += deltaTime
+
+					deltaTime = trackData.DeltaSummation
+				end
+
+				local statusByte = stringSub(Hex, pointer, pointer + 1)
+				local statusByteDecimal = tonumber(statusByte, 16)
+				if not statusByteDecimal then trackData[4].EndOfTrack = true end
+				
+				local waitEvery = Parser.WaitEvery
+				if waitEvery then
+					ParseCounter += 1
+					if ParseCounter%waitEvery == 0 then
+						task.wait(Parser.WaitTime)
+					end
+				end
+				
+				pointer += 2
+
+				if statusByte == "FF" then -- Meta-Event
+					local eventType = stringSub(Hex, pointer, pointer + 1)
+					pointer += 2
+
+					local dataLength = tonumber(stringSub(Hex, pointer, pointer + 1), 16)
+
+					local eventBind = InstructionEventBytes[eventType]
+					if eventBind then
+						local eventData = {}
+						local eventDataPointer = 2
+						for _, eventDataLength in next, eventBind[2] do
+							local isLength = eventDataLength == "LENGTH"
+							if isLength then
+								eventDataLength = 2 + dataLength * 2
+							end
+							
+							local eventDataString = stringSub(Hex, pointer + eventDataPointer, pointer + (eventDataPointer + (eventDataLength - 1)))
+							tableInsert(eventData, isLength and ByteRealm:FromHex(eventDataString) or tonumber(eventDataString, 16))	
+							
+							eventDataPointer += eventDataLength
+						end
+						
+						local instruction = { eventBind[1], deltaTime, unpack(eventData) }
+						insert(Parser.Instructions[trackNumber], instruction)
+						FireEvent(eventBind[1], instruction)
+						
+						if eventType == "2F" then -- EndOfTrack
+							trackData[4].EndOfTrack = true
+						end
+						
+						pointer += 2 + dataLength * 2
+					else
+						pointer -= 2
+						FireEvent("Error", {
+							TrackNumber = trackNumber,
+							Message = `Unknown Meta-Event {eventType}`,
+							Pointer = pointer,
+							SurroundingBytes = stringSub(Hex, pointer - 6, pointer + 3),
+							Code = 0
+						})
+						
+						break
+					end
+				else -- Midi-Event & Other Events
+					local eventCode = EventCodes[trackNumber]
+					if statusByteDecimal < 240 then -- Check if Midi-Event and Running Status
+						if statusByteDecimal and statusByteDecimal % 256 > 127 then
+							EventCodes[trackNumber] = statusByte
+							eventCode = EventCodes[trackNumber]
+						else -- Wants a Running Status
+							pointer -= 2
+							if EventCodes[trackNumber] == -1 then
+								insert(Parser.Instructions[trackNumber], { "EndOfTrack", 0 })
+								FireEvent("Error", {
+									TrackNumber = trackNumber,
+									Message = `Running Status not set {EventCodes[trackNumber]}`,
+									Pointer = pointer,
+									SurroundingBytes = stringSub(Hex, pointer - 6, pointer + 3),
+									Code = 2
+								})
+
+								trackData[4].Exit = true
+								break
+							end
+						end
+					else -- Other Events
+						eventCode = statusByte
+					end
+					
+					local status, channel = unpack(stringSplit(eventCode, ""))
+					
+					local eventBind = InstructionEventBytes[status] or InstructionEventBytes[eventCode]
+					if eventBind then
+						local eventData = {}
+						local eventDataPointer = 0
+						
+						local dataLength = tonumber(stringSub(Hex, pointer, pointer + 1), 16)
+						for _, eventDataLength in next, eventBind[2] do
+							local isLength = eventDataLength == "LENGTH"
+							if isLength then
+								eventDataLength = 2 + dataLength * 2
+							end
+							
+							local eventDataString = stringSub(Hex, pointer + eventDataPointer, pointer + (eventDataPointer + (eventDataLength - 1)))
+							
+							tableInsert(eventData, isLength and ByteRealm:FromHex(eventDataString) or tonumber(eventDataString, 16))
+							eventDataPointer += eventDataLength
+						end
+
+						local instruction = { eventBind[1], deltaTime, tonumber(channel, 16), unpack(eventData) }
+						tableInsert(Parser.Instructions[trackNumber], instruction)
+						FireEvent(eventBind[1], instruction)
+						
+						pointer += eventDataPointer
+					else
+						FireEvent("Error", {
+							TrackNumber = trackNumber,
+							Message = `Unknown Byte {eventCode}`,
+							Pointer = pointer,
+							SurroundingBytes = stringSub(Hex, pointer - 6, pointer + 3),
+							Code = 1
+						})
+					end
+				end
+
+				trackData[3] = pointer - trackData[1]
+			end
+			if EndOfTrack then break end
+		until false
+
+		return Parser
+	end
+
+	return Parser
+end
+
+MidiClasses.Midi = function()
+	local Midi = {
+		IsMidi = true,
+		Raw = {},
+		Header = {}
+	}
+	
+	function Midi:Load(Buffer)
+		assert(Buffer, "Buffer is nil or false.")
+		assert(typeof(Buffer) == "string", `Invalid Buffer Type got {typeof(Buffer)} expected string`)
+
+		local Hex = ByteRealm:ToHex(Buffer)
+		self.Raw.Hex = Hex
+
+		local header = ByteRealm:GetHeader(Buffer)
+		assert(header == "MThd", `Invalid Header got {header} expected MThd`)
+
+		local upcomingBytes = ByteRealm:HexToDecimal(stringSub(Hex, 10, 16))
+		assert(upcomingBytes == 6, "Most significant byte of MThd header chunk length is not 6")
+
+		self.Header.Format = ByteRealm:HexToDecimal(stringSub(Hex, 18, 20))
+		self.Header.NumberOfTracks = ByteRealm:HexToDecimal(stringSub(Hex, 22, 24))
+		self.Header.PulsesPerQuarter = ByteRealm:HexToDecimal(stringSub(Hex, 26, 28))
+
+		return self
+	end
+	
+	return Midi
+end
+
+MidiClasses.Binder = function()
+	local Binder = {
+		IsBinder = true,
+		BindingOrder = {}
+	}
+	
+	function Binder:Bind(...)
+		Binder.BindingOrder = {...}
+		return Binder
+	end
+	
+	function Binder:Load(Buffer)
+		if Binder.BindingOrder[1] then
+			local Data = Binder.BindingOrder[1]:Load(Buffer)
+			for _, MidiClass in next, Binder.BindingOrder, 1 do
+				if MidiClass[1] then
+					Data = MidiClass[1]:Load(Data)[MidiClass[2]](MidiClass[1], unpack(MidiClass, 3))
+				else
+					if MidiClass.Multi then
+						for _, Class in next, MidiClass.Multi do
+							Class:Load(Data)
+						end
+					end
+				end
+			end
+		end
+		
+		return Binder
+	end
+	
+	return Binder
+end
+
+MidiClasses.Notator = function()
+	local Notator = {
+		IsNotator = true,
+		
+		Instruments = {
+			Piano = { SoundId = "rbxassetid://5924276201", Offset = -42 },
+			Tuba = { SoundId = "rbxassetid://1846986991", Offset = -42 },
+			Recorder = { SoundId = "rbxassetid://75338648", Offset = -42 },
+		},
+		
+		Percussion = {
+			-- Bass Drum
+			[35] = "rbxassetid://31173820",
+			[36] = "rbxassetid://31173820",
+
+			-- HiHat
+			[82] = "rbxassetid://31173898",
+
+			--Conga
+			[62] = "rbxassetid://57802212",
+			[63] = "rbxassetid://57802212",
+			[64] = "rbxassetid://57802134",
+
+			--Conga
+			[60] = "rbxassetid://57802055",
+			[61] = "rbxassetid://57801983",
+			--Toms
+			[45] = "rbxassetid://31173881",
+
+			[47] = "rbxassetid://31173863",
+			[48] = "rbxassetid://31173863",
+
+			[50] = "rbxassetid://31173844",
+
+			--Cowbell
+			[56] = "rbxassetid://9120917609",
+
+
+			--Cymbals
+			[49] = "rbxassetid://31173771", -- Crash
+			[51] = "rbxassetid://31173898", -- Ride
+			[57] = "rbxassetid://31173771", -- Crash
+			[59] = "rbxassetid://31173898", -- Ride
+
+			[42] = "rbxassetid://4702649974", --HiHat Closed
+			[44] = "rbxassetid://4702649717", --HiHat
+			[46] = "rbxassetid://4702649315", --HiHat
+
+			-- Cuica
+			[78] = "rbxassetid://7430849680",
+			[79] = "rbxassetid://7430849680",
+			-- Snare
+			[38] = "rbxassetid://31173799",
+			[40] = "rbxassetid://31173799",
+
+			--Triangle
+			[80] = "rbxassetid://6732342375",
+			[81] = "rbxassetid://6732342375",
+
+			-- Wood Blocks
+			[76] = "rbxassetid://9120917978",
+			[77] = "rbxassetid://9120917605",
+		}
+	}
+	
+	function Notator:AddInstruments(instruments: { { SoundId: string, Offset: number } })
+		for instrumentName, soundData in next, instruments do
+			Notator.Instruments[instrumentName] = soundData
+		end; return Notator
+	end
+	
+	function Notator:IsPercussion(noteNumber)
+		return Notator.Percussion[noteNumber]
+	end
+	
+	function Notator:CreateSound(
+		instrument: string,
+		settings: {
+			NoteNumber: number,
+			Velocity: number,
+			Offset: number, -- Optional
+			CheckForPercussion: boolean
+		}
+	)
+		local isPercussion = settings.CheckForPercussion and Notator:IsPercussion(settings.NoteNumber)
+		
+		local instrumentSoundData = Notator.Instruments[instrument]
+		
+		local Sound = Instance.new("Sound")
+		Sound.Name = tableConcat(pack(References.NoteNumberToNoteName(settings.NoteNumber), ""))
+		Sound.SoundId = isPercussion or instrumentSoundData.SoundId
+		Sound.PlaybackSpeed = isPercussion and 1 or References.NoteNumberToPitch(settings.NoteNumber, settings.Offset or instrumentSoundData.Offset)
+		Sound.Volume = settings.Velocity/127
+		return Sound
+	end
+	
+	return Notator
+end
+
+MidiClasses.Visualizer = function()
+	local Visualizer = {
+		IsVisualizer = true
+	}
+	
+	function Visualizer:Basic(
+		settings: {
+			NoteNumber: number,
+			Length: number,
+			CenterCFrame: CFrame,
+			
+			Size: number,
+			
+			Z: number,
+			
+			Sharp: number,
+			C: number
+		}
+	)
+		local NoteLetter = InteractiveMidi.References.NoteNumberToNoteName(settings.NoteNumber)
+		
+		local NoteBlock = Instance.new("Part")
+		NoteBlock.Anchored = true
+		NoteBlock.Massless = true
+		NoteBlock.CanCollide = false
+		NoteBlock.CanQuery = false
+		NoteBlock.CanTouch = false
+		NoteBlock.CFrame = settings.CenterCFrame * CFrame.new((settings.NoteNumber - 60) * settings.Size, 0, 0)
+		NoteBlock.Size = Vector3.new(stringFind(NoteLetter, "#") and settings.Sharp or settings.C, settings.Length, settings.Z) * settings.Size
+		
+		local BlockData = { IsBlockData = true, NoteLetter = NoteLetter, Block = NoteBlock }
+		
+		function BlockData:Stop()
+			BlockData.StopThread = true
+			if BlockData.MoveThread then coroutine.close(BlockData.MoveThread); BlockData.MoveThread = nil end
+			return BlockData
+		end
+		
+		function BlockData:SmoothHide(tweenTime)
+			game:GetService("TweenService"):Create(NoteBlock, TweenInfo.new(tweenTime), {
+				Transparency = 1
+			}):Play()
+			return BlockData
+		end
+		
+		function BlockData:SmoothVisibility(tweenTime)
+			NoteBlock.Transparency = 1
+			game:GetService("TweenService"):Create(NoteBlock, TweenInfo.new(tweenTime), {
+				Transparency = 0,
+			}):Play()
+			return BlockData
+		end
+		
+		function BlockData:StopGrow()
+			BlockData.Grow = false
+			return BlockData
+		end
+		
+		function BlockData:MoveUp(height, tweenTime, grows)
+			BlockData:Stop()
+			BlockData.MoveThread = task.spawn(function()
+				BlockData.MovingStart = NoteBlock.CFrame
+				BlockData.Height = height
+				BlockData.TweenTime = tweenTime * 2
+				BlockData.TimeElapsed = 0
+				BlockData.LastBlockTime = 0
+				BlockData.BlockTime = 0
+				BlockData.StopThread = false
+				BlockData.Grow = grows
+				
+				while BlockData.TimeElapsed < BlockData.TweenTime do
+					BlockData.LastBlockTime = BlockData.BlockTime
+					local deltaTime = task.wait()
+					BlockData.BlockTime += deltaTime
+					BlockData.TimeElapsed += deltaTime
+					
+					local heightPositionY = BlockData.Height * (BlockData.BlockTime/BlockData.TweenTime)
+					local growY = BlockData.Height * (BlockData.TimeElapsed/BlockData.TweenTime)
+					NoteBlock.CFrame = BlockData.MovingStart * CFrame.new(0, heightPositionY + growY, 0)
+					
+					if BlockData.Grow then
+						local growHeightY = BlockData.Height * (BlockData.TimeElapsed/BlockData.TweenTime)
+						NoteBlock.Size = NoteBlock.Size * Vector3.new(1, 0, 1) + Vector3.yAxis * growHeightY * 2
+						BlockData.BlockTime = BlockData.LastBlockTime
+					end
+				end
+			end)
+			
+			return BlockData
+		end
+		
+		NoteBlock.Destroying:Once(BlockData.Stop)
+		
+		return BlockData
+	end
+	
+	return Visualizer
+end
+
+MidiClasses.Composer = function()
+	local Composer = {
+		IsComposer = true,
+		
+		Format = 0,
+		PulsesPerQuarter = 384,
+		
+		ComposedTracks = {}
+	}
+	
+	local ComposedTracks = Composer.ComposedTracks
+	function Composer:Create(TrackNumber: number, EventData: {})
+		local Track = ComposedTracks[TrackNumber]
+		if not Track then
+			ComposedTracks[TrackNumber] = {}
+			Track = ComposedTracks[TrackNumber]
+		end
+		
+		Track[#Track + 1] = EventData
+		return Composer
+	end
+	
+	function Composer:Load(MidiClass)
+		tableClear(Composer.ComposedTracks)
+		deepCopy(MidiClass.Instructions, Composer.ComposedTracks)
+		return Composer
+	end
+	
+	function Composer:ToHex()
+		-- Header Chunk, MThd
+		local Hex = `4D54686400000006{decimalToHexZeros(Composer.Format, 4)}{decimalToHexZeros(#ComposedTracks, 4)}{decimalToHexZeros(Composer.PulsesPerQuarter, 4)}`
+
+		local DeltaTimeToHex = References.DeltaTimeToHex
+		for trackNumber, trackData in next, ComposedTracks do
+			-- Start of Track, MTrk
+			local lastDeltaTime = nil
+			local trackLength = 0
+			local trackHex = ""
+			
+			Hex ..= "4D54726B"
+			for _, eventData in next, trackData do
+				if not lastDeltaTime then lastDeltaTime = eventData[2] end
+				local deltaTime = abs(lastDeltaTime - eventData[2])
+				
+				for eventHex, eventByteData in next, InstructionEventBytes do
+					if eventByteData[1] == eventData[1] then
+						if eventByteData.IsMetaEvent then
+							local byteData = pack(select(3, unpack(eventData)))
+							
+							local hexByteData
+							if eventHex == "2F" then
+								hexByteData = "00"
+							else
+								hexByteData = decimalToHexZeros(#byteData, 2)
+								for i, v in next, byteData do
+									local length = eventByteData[2][i]
+									if length == "LENGTH" then
+										hexByteData ..= ByteRealm:ToHex(v)
+									else
+										hexByteData ..= decimalToHexZeros(v, length)
+									end
+								end
+							end
+							
+							local dataLength = eventHex == "2F" and 0 or #hexByteData/2
+							trackHex ..= DeltaTimeToHex(deltaTime, 2)..`FF{eventHex}{decimalToHexZeros(dataLength, 2)}{hexByteData}`
+						else
+							local byteData = pack(select(4, unpack(eventData)))
+							
+							local hexByteData = ""
+							for i, v in next, byteData do
+								local length = eventByteData[2][i]
+								if length == "LENGTH" then
+									hexByteData ..= ByteRealm:ToHex(v)
+								else
+									hexByteData ..= decimalToHexZeros(v, length)
+								end
+							end
+
+							trackHex ..= DeltaTimeToHex(deltaTime, 2)..`{eventHex}{hexByteData}`
+						end
+					end
+				end
+				
+				lastDeltaTime = eventData[2]
+			end
+			
+			trackLength = #trackHex/2
+			Hex ..= decimalToHexZeros(trackLength, 8)..trackHex
+		end
+		
+		return Hex
+	end
+	
+	function Composer:ToBuffer(PreHex)
+		local Hex = PreHex or Composer:ToHex()
+		return ByteRealm:FromHex(Hex)
+	end
+	
+	return Composer
+end
+
+function InteractiveMidi.new(...)
+	local SpecifiedClasses = {...}
+	local CreatedClasses = {}
+	
+	for _, MidiClass in next, SpecifiedClasses do
+		if not (MidiClass and MidiClasses[MidiClass]) then
+			local Classes = ""
+			for ClassName, _ in next, MidiClasses do
+				Classes ..= ClassName..", "
+			end; Classes = stringSub(Classes, 1, #Classes - 2)
+
+			error(`{MidiClass} is an Invalid Midi Class. Classes: [{Classes}] EX: InteractiveMidi.new("Midi")`)
+		else
+			insert(CreatedClasses, MidiClasses[MidiClass]())
+		end
+	end
+	
+	return unpack(CreatedClasses)
+end
+
+return InteractiveMidi]]></ProtectedString>
+        </Properties>
+        <Item class="ModuleScript" referent="RBXI93SYXMYOFLYRH3720ZEW4WZHQ8C4ULF">
+            <Properties>
+                <string name="Name">ByteRealm</string>
+                <string name="ScriptGuid">{c88220c6-99af-4856-9524-19372446ae95}</string>
+                <ProtectedString name="Source"><![CDATA[-- // Types \\ --
+
+type Byte = string
+type Hexadecimal = string
+
+-- // Variables \\ --
+local stringRep = string.rep
+local stringByte = string.byte
+local stringFormat = string.format
+local stringChar = string.char
+local stringSub = string.sub
+local tableInsert = table.insert
+
+-- // Module \\ --
+
+local ByteRealm = {}
+
+-- [ Hexadecimals ] --
+
+function ByteRealm:ToHex(str: Byte): Hexadecimal
+	return (str:gsub('.', function (c)
+		return stringFormat('%02X', stringByte(c))
+	end))
+end
+
+function ByteRealm:FromHex(str: Hexadecimal): Byte
+	return (str:gsub('..', function (cc)
+		return stringChar(tonumber(cc, 16))
+	end))
+end
+
+function ByteRealm:HexInTable(str: Hexadecimal): (string?, string?, ...string?)
+	local parts = {}
+	for i = 1, #str, 2 do
+		parts[#parts + 1] = stringSub(str, i, i + 1)
+	end; return parts
+end
+
+function ByteRealm:HexToDecimalTwo(cc: Hexadecimal): { number }
+	local hexInTable = ByteRealm:HexInTable(cc)
+	local decimals = {}
+	for i, hex in next, hexInTable do
+		decimals[i] = tonumber(hex, 16)
+	end; return decimals
+end
+
+function ByteRealm:FillHex(hex, length)
+	return stringRep("0", length - #hex)..hex
+end
+
+function ByteRealm:HexToDecimal(cc: Hexadecimal): number
+	return tonumber(cc, 16)
+end
+
+function ByteRealm:BufferToDecimal(byte: Byte)
+	return stringByte(byte)
+end
+
+function ByteRealm:AddSpacesToHex(hex: Hexadecimal): string
+	local spaced_hex = ""
+	for i = 1, #hex, 2 do
+		spaced_hex = spaced_hex .. hex:sub(i, i+1) .. " "
+	end; return spaced_hex:sub(1, -2) -- remove trailing space
+end
+
+function ByteRealm:DecimalToHexadecimal(decimal: number | { number }): Hexadecimal
+	if typeof(decimal) == "table" then
+		local hexadecimal = ""
+		for _, v in next, decimal do
+			hexadecimal ..= stringFormat("%X", v)
+		end; return hexadecimal
+	else
+		return stringFormat("%X", decimal)
+	end
+end
+
+function ByteRealm:BufferToBerInteger(s: Byte, start: number): (number, number)
+	local i = start
+	local integer = 0
+	while true do
+		local byte = string.byte(s, i)
+		integer = integer + (byte%128)
+		if byte < 127.5 then
+			return integer, i+1
+		end
+		if i >= #s then
+			warn('BufferToBerInteger: no end-of-integer found')
+			return 0, start
+		end
+		i = i + 1
+		integer = integer * 128
+	end
+end
+
+-- [ Byte Reading ] --
+
+function ByteRealm:GetHeader(byte: Byte): string
+	return stringSub(byte, 1, 4)
+end
+
+return ByteRealm]]></ProtectedString>
+            </Properties>
+        </Item>
+    </Item>
+</roblox>
