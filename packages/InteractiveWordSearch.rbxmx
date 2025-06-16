@@ -1,0 +1,294 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXRK3JOEL9ZO0IBFCEQM0S7M8HLVITFRBJ">
+        <Properties>
+            <string name="Name">InteractiveWordSearch</string>
+            <string name="ScriptGuid">{eee5a046-4ba6-4442-9d92-6e4b04e56114}</string>
+            <ProtectedString name="Source"><![CDATA[local InteractiveWordSearch = {}
+
+local tableMove = table.move
+local tableConcat = table.concat
+
+local mathMin = math.min
+local mathMax = math.max
+
+local vector2New = Vector2.new
+
+function InteractiveWordSearch.new(
+	settings: {
+		UseVectors: boolean?,
+		FindReverseRows: boolean?
+	}?, 
+
+	wordSearch: { string }?
+)
+	settings = settings or {}
+	local self = setmetatable({}, { __index = InteractiveWordSearch })
+
+	self.WordSearch = {} :: { string? }
+
+	self.Settings = {
+		UseVectors = settings.UseVectors == nil and true or settings.UseVectors,
+		FindReverseRows = settings.FindReverseRows == nil and true or settings.FindReverseRows,
+	}
+
+	if wordSearch then
+		self:SetWordSearch(wordSearch)
+	end
+
+	return self
+end
+
+function InteractiveWordSearch:SetWordSearch(
+	wordSearch: { string }
+)
+	local formattedWordSearch = {}
+
+	for i = 1, #wordSearch do
+		local row = wordSearch[i]
+		local formattedRow = row:gsub(" ", ""):lower()
+		if formattedRow == "" then continue end
+
+		formattedWordSearch[#formattedWordSearch + 1] = formattedRow
+	end
+
+	self.WordSearch = formattedWordSearch
+	return formattedWordSearch
+end
+
+function InteractiveWordSearch:StringToWordSearch(wordSearchString: string)
+	local wordSearchStringed = wordSearchString:split("\n")
+	local wordSearch = {}
+	for i = 1, #wordSearchStringed do
+		local row = wordSearchStringed[i]
+		if row:gsub(" ", "") ~= "" then
+			wordSearch[#wordSearch + 1] = row 
+		end
+	end
+	return wordSearch
+end
+
+function InteractiveWordSearch:LinearWordSearch(wordSearch: { string }, formattedWord: string, settings, __searchType: string?)
+	local useVectors: boolean = settings.UseVectors
+	local findReverseRows: boolean = settings.FindReverseRows
+
+	local response = {}
+	for rowNumber = 1, #wordSearch do
+		local row = wordSearch[rowNumber]
+
+		local index = 0
+		local reverseWord = false
+
+		repeat
+			local startColumn, endColumn = row:find(reverseWord and formattedWord:reverse() or formattedWord, index)
+
+			if not startColumn then
+				if reverseWord then
+					break
+				elseif findReverseRows then
+					reverseWord = true
+					continue
+				end
+			end
+
+			if startColumn then
+				response[#response + 1] = { 
+					useVectors and vector2New(startColumn, rowNumber) or {startColumn, rowNumber}, 
+					useVectors and vector2New(endColumn, rowNumber) or {endColumn, rowNumber},
+					__searchType or "Linear",
+					reverseWord
+				}
+
+				index = endColumn
+			end
+
+			reverseWord = false
+		until index >= #row
+	end
+	return response
+end
+
+function InteractiveWordSearch:FindWordInHorizontal(wordSearch: { string }, formattedWord: string, settings)
+	return self:LinearWordSearch(wordSearch, formattedWord, settings, "Horizontal")
+end
+
+function InteractiveWordSearch:FindWordInVertical(wordSearch: { string }, formattedWord: string, settings)
+	local response = self:LinearWordSearch(self:InverseWordSearch(wordSearch), formattedWord, settings, "Vertical")
+	local useVectors = settings.UseVectors
+	for i = 1, #response do
+		if useVectors then
+			response[i][1] = vector2New(response[i][2].Y, response[i][1].X)
+			response[i][2] = vector2New(response[i][1].Y, response[i][2].X)
+		else
+			response[i][1], response[i][2] = response[i][2], response[i][1]
+		end
+	end
+	return response
+end
+
+function InteractiveWordSearch:FindWordInTopLeftDiagonal(wordSearch: { string }, formattedWord: string, settings)
+	local response = self:LinearWordSearch(self:DiagonalTraversal(wordSearch), formattedWord, settings, "Diagonal")
+
+	local useVectors = settings.UseVectors
+	for _, wordInfo in next, response do
+		if useVectors then
+			local gridPositionStartX, gridPositionStartY = self:DiagonalTraversalPositionToGridPosition(wordSearch, wordInfo[1].Y, wordInfo[1].X)
+			local gridPositionEndX, gridPositionEndY = self:DiagonalTraversalPositionToGridPosition(wordSearch, wordInfo[2].Y, wordInfo[2].X)
+
+			wordInfo[1] = vector2New(gridPositionStartX, gridPositionStartY)
+			wordInfo[2] = vector2New(gridPositionEndX, gridPositionEndY)
+		else
+			local gridPositionStartX, gridPositionStartY = self:DiagonalTraversalPositionToGridPosition(wordSearch, wordInfo[1][2], wordInfo[1][1])
+			local gridPositionEndX, gridPositionEndY = self:DiagonalTraversalPositionToGridPosition(wordSearch, wordInfo[2][2], wordInfo[2][1])
+
+			wordInfo[1] = {gridPositionStartX, gridPositionStartY}
+			wordInfo[2] = {gridPositionEndX, gridPositionEndY}
+		end
+	end
+
+	return response
+end
+
+function InteractiveWordSearch:FindWordInTopRightDiagonal(wordSearch: { string }, formattedWord: string, settings)
+	local response = self:LinearWordSearch(self:DiagonalTraversal(self:ReverseWordSearch(wordSearch)), formattedWord, settings, "Diagonal")
+
+	local useVectors = settings.UseVectors
+	for _, wordInfo in next, response do
+		if useVectors then
+			local gridPositionStartX, gridPositionStartY = self:DiagonalTraversalPositionToGridPosition(wordSearch, wordInfo[1].Y, wordInfo[1].X)
+			local gridPositionEndX, gridPositionEndY = self:DiagonalTraversalPositionToGridPosition(wordSearch, wordInfo[2].Y, wordInfo[2].X)
+
+			wordInfo[1] = vector2New(#wordSearch[gridPositionStartY] - gridPositionStartX + 1, gridPositionStartY)
+			wordInfo[2] = vector2New(#wordSearch[gridPositionStartY] - gridPositionEndX + 1, gridPositionEndY)
+		else
+			local gridPositionStartX, gridPositionStartY = self:DiagonalTraversalPositionToGridPosition(wordSearch, wordInfo[1][2], wordInfo[1][1])
+			local gridPositionEndX, gridPositionEndY = self:DiagonalTraversalPositionToGridPosition(wordSearch, wordInfo[2][2], wordInfo[2][1])
+
+			wordInfo[1] = {#wordSearch[gridPositionStartY] - gridPositionStartX + 1, gridPositionStartY}
+			wordInfo[2] = {#wordSearch[gridPositionStartY] - gridPositionEndX + 1, gridPositionEndY}
+		end
+	end
+
+	return response
+end
+
+function InteractiveWordSearch:FindWordInDiagonal(wordSearch: { string }, formattedWord: string, settings)
+	local topLeftDiagonal = self:FindWordInTopLeftDiagonal(wordSearch, formattedWord, settings)
+	local topRightDiagonal = self:FindWordInTopRightDiagonal(wordSearch, formattedWord, settings)
+	return tableMove(topRightDiagonal, 1, #topRightDiagonal, #topLeftDiagonal + 1, topLeftDiagonal)
+end
+
+function InteractiveWordSearch:DiagonalTraversalPositionToGridPosition(wordSearch: { string }, y: number, x: number)
+	local leftShift = x - 1
+	return mathMin(#wordSearch[1], y) - leftShift, leftShift + 1 + mathMax(y - #wordSearch[1], 0)
+end
+
+function InteractiveWordSearch:_getDiagonal(wordSearch: { string }, row: number, column: number)
+	local numRows = #wordSearch
+
+	local diagonal = {}
+	while row <= numRows and column >= 1 do
+		diagonal[#diagonal + 1] = wordSearch[row]:sub(column, column)
+		row = row + 1
+		column = column - 1
+	end
+
+	return diagonal, row, column
+end
+
+function InteractiveWordSearch:DiagonalTraversal(wordSearch: { string })
+	local diagonalTraversalWordSearch = {}
+
+	local numCols = #wordSearch[1]
+
+	for col = 1, numCols do
+		local diagonal = self:_getDiagonal(wordSearch, 1, col)
+		diagonalTraversalWordSearch[#diagonalTraversalWordSearch + 1] = diagonal
+	end
+
+	for row = 2, #wordSearch do
+		local diagonal = self:_getDiagonal(wordSearch, row, numCols)
+		diagonalTraversalWordSearch[#diagonalTraversalWordSearch + 1] = diagonal
+	end
+
+	for i = 1, #diagonalTraversalWordSearch do
+		diagonalTraversalWordSearch[i] = tableConcat(diagonalTraversalWordSearch[i], "")
+	end
+
+	return diagonalTraversalWordSearch
+end
+
+function InteractiveWordSearch:InverseWordSearch(wordSearch: { string })
+	local inversedWordSearch = {}
+
+	for outerIndex = 1, #wordSearch do
+		local word = wordSearch[outerIndex]:split("")
+		for innerIndex = 1, #word do
+			if not inversedWordSearch[innerIndex] then inversedWordSearch[innerIndex] = {} end
+			inversedWordSearch[innerIndex][outerIndex] = word[innerIndex]
+		end
+	end
+
+	for i = 1, #inversedWordSearch do
+		inversedWordSearch[i] = tableConcat(inversedWordSearch[i])
+	end
+
+	return inversedWordSearch
+end
+
+function InteractiveWordSearch:ReverseWordSearch(wordSearch: { string })
+	local reversedWordSearch = {}
+	for i = 1, #wordSearch do
+		reversedWordSearch[i] = wordSearch[i]:reverse()
+	end
+	return reversedWordSearch
+end
+
+function InteractiveWordSearch:FlipWordSearch(wordSearch: { string })
+	local flippedWordSearch = {}
+	for i = #wordSearch, 1, -1 do
+		flippedWordSearch[i] = wordSearch[i]
+	end
+	return flippedWordSearch
+end
+
+function InteractiveWordSearch:FindWord(word: string)
+	local wordSearch = self.WordSearch :: { string }
+
+	local formattedWord = word:gsub(" ", ""):lower()
+
+	local response = {}
+
+	local settings = self.Settings
+	local useVectors: boolean = settings.UseVectors
+	local findReverseRows: boolean = settings.FindReverseRows
+
+	local horizontalResponse = self:FindWordInHorizontal(wordSearch, formattedWord, settings)
+	tableMove(horizontalResponse, 1, #horizontalResponse, #response + 1, response)
+
+	local verticalResponse = self:FindWordInVertical(wordSearch, formattedWord, settings)
+	tableMove(verticalResponse, 1, #verticalResponse, #response + 1, response)
+
+	local diagonalResponse = self:FindWordInDiagonal(wordSearch, formattedWord, settings)
+	tableMove(diagonalResponse, 1, #diagonalResponse, #response + 1, response)
+
+	return response :: {
+		{ Vector2? }
+	}
+end
+
+function InteractiveWordSearch:FindWords(words: { string })
+	local response = {}
+
+	for i = 1, #words do
+		local word = words[i]
+		response[word] = self:FindWord(word)
+	end
+
+	return response
+end
+
+return InteractiveWordSearch]]></ProtectedString>
+        </Properties>
+    </Item>
+</roblox>
