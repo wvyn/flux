@@ -1,9 +1,9 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
 <Meta name="ExplicitAutoJoints">true</Meta>
-<Item class="ModuleScript" referent="RBXCEVPLZ84EDSNUHPOEACBG24F7609DKZ7">
+<Item class="ModuleScript" referent="RBXW4J43VVI6IA9TTCPVK00FK5Q7NIKS7Y8">
 <Properties>
 <string name="Name">http</string>
-<string name="ScriptGuid">{ab9e9f60-b1b4-4851-a6ff-39a94ff27395}</string>
+<string name="ScriptGuid">{fb03d78e-9543-4b60-bc26-52d8d042d4b2}</string>
 <ProtectedString name="Source"><![CDATA[local httpService = game:GetService("HttpService")
 
 local http = { 
@@ -119,10 +119,10 @@ end
 
 return http]]></ProtectedString>
 </Properties>
-<Item class="ModuleScript" referent="RBXPU5TO8E4UT0EWSUGMHSN54ONMNMTZZ2L">
+<Item class="ModuleScript" referent="RBXO65ZQVULJYD849YNCSZANOGJH6DHP3YZ">
 <Properties>
 <string name="Name">Encryption</string>
-<string name="ScriptGuid">{681b2bac-6cea-4437-8d8c-f38526b6b070}</string>
+<string name="ScriptGuid">{48f0e3ab-2d2f-4e5a-83ee-ab91de6c1973}</string>
 <ProtectedString name="Source"><![CDATA[local Encryption = {
 	Base64 = {}
 }
@@ -200,10 +200,10 @@ end
 
 return Encryption]]></ProtectedString>
 </Properties>
-<Item class="ModuleScript" referent="RBXXI0LQ86ELQNCS9YFPOI0S9X6QNEBUK78">
+<Item class="ModuleScript" referent="RBXGYJ5N0K4FC4CKAA7HFAC3CL0RF5ANUHP">
 <Properties>
 <string name="Name">RBXM</string>
-<string name="ScriptGuid">{b4604db9-7ff2-49e2-a606-1a1cbb0b99a1}</string>
+<string name="ScriptGuid">{d39cb28c-7ed3-450c-9623-9e7c551ae26a}</string>
 <ProtectedString name="Source"><![CDATA[local httpService = game:GetService("HttpService")
 local scriptEditorService = game:GetService("ScriptEditorService")
 
@@ -347,10 +347,10 @@ end
 return RBXM]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBXLP5D2MZIFYW8O2IJ8EXPV3LJL8R4K4UG">
+<Item class="ModuleScript" referent="RBXR75L3PBDZ0VINFFUO8UDZFUJ3CPOWN6F">
 <Properties>
 <string name="Name">Signal</string>
-<string name="ScriptGuid">{f1c651f8-0746-4840-bd33-26dcbaf1572c}</string>
+<string name="ScriptGuid">{53263647-d9f4-4579-9a5b-e315a4236070}</string>
 <ProtectedString name="Source"><![CDATA[local SignalConstructor = {}
 local SignalMethods = {}
 
@@ -480,10 +480,10 @@ export type Signal = typeof(SignalConstructor.new())
 return SignalConstructor]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBXX5QZU62F5VZ9FX1FIZ1M3UL3M5A2P2KF">
+<Item class="ModuleScript" referent="RBXA27DPPIA1BABKY1AIX0GJKNJ5R89CO8Q">
 <Properties>
 <string name="Name">Logs</string>
-<string name="ScriptGuid">{15ff3485-9c0a-4a1a-b3a7-38c88108f4a4}</string>
+<string name="ScriptGuid">{bf32c3cc-bdc9-4a5a-a8d6-6ff9e8c2be5c}</string>
 <ProtectedString name="Source"><![CDATA[local Signal = require("./Signal")
 
 local Logs = {}
@@ -573,10 +573,10 @@ return Logs]]></ProtectedString>
 </Properties>
 </Item>
 </Item>
-<Item class="ModuleScript" referent="RBX4JYAJPTEKV1WQN5MXUKDQOSZB5GDWR51">
+<Item class="ModuleScript" referent="RBX5MWMW0P7NRAK14HOVX7MF8TXGA9R8YV3">
 <Properties>
 <string name="Name">RBXM</string>
-<string name="ScriptGuid">{15f208d5-e24c-4d5b-9d4e-d84591bc3f38}</string>
+<string name="ScriptGuid">{a3872903-b0f9-4bd0-b85c-bb69654e8025}</string>
 <ProtectedString name="Source"><![CDATA[local httpService = game:GetService("HttpService")
 local scriptEditorService = game:GetService("ScriptEditorService")
 
