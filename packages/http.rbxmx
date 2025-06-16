@@ -1,9 +1,9 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
 <Meta name="ExplicitAutoJoints">true</Meta>
-<Item class="ModuleScript" referent="RBXBWUCXN3DNFVPNYQ7UM7HCK1G3LUD1LAQ">
+<Item class="ModuleScript" referent="RBXHV1KQ7EBURSMZLLU7WMMQ5W59Z8CQ4MV">
 <Properties>
 <string name="Name">http</string>
-<string name="ScriptGuid">{2539036d-ee63-4836-95e4-5158654b7edf}</string>
+<string name="ScriptGuid">{ccdf7f9a-fa46-436a-9353-1592ce2bcb8d}</string>
 <ProtectedString name="Source"><![CDATA[local httpService = game:GetService("HttpService")
 
 local http = { 
@@ -119,10 +119,10 @@ end
 
 return http]]></ProtectedString>
 </Properties>
-<Item class="ModuleScript" referent="RBXX34X5KLAO5ENJWKOBEIJ1KBESK3OGM05">
+<Item class="ModuleScript" referent="RBXSESAUEFXRLJPR32MOSFM5RKM5SVON7ZZ">
 <Properties>
 <string name="Name">Encryption</string>
-<string name="ScriptGuid">{8fdcf004-9b6e-4dc4-a4c1-f166f1fcc9bf}</string>
+<string name="ScriptGuid">{9eb2e591-e504-4794-b01e-1a785f928525}</string>
 <ProtectedString name="Source"><![CDATA[local Encryption = {
 	Base64 = {}
 }
@@ -200,6 +200,383 @@ end
 
 return Encryption]]></ProtectedString>
 </Properties>
+</Item>
+<Item class="Folder" referent="RBXS8H38VG0QD0V0QGGCHBBXA5C4LYAVUAH">
+<Properties>
+<string name="Name">FolderTesting</string>
+</Properties>
+<Item class="ModuleScript" referent="RBXKIH7HMNE84LBEX09XAH2GU32GZXQ07Z3">
+<Properties>
+<string name="Name">Signal</string>
+<string name="ScriptGuid">{7b0d9410-281f-420c-8d6d-1397600f2457}</string>
+<ProtectedString name="Source"><![CDATA[local SignalConstructor = {}
+local SignalMethods = {}
+
+local tableRemove = table.remove
+local tableFind = table.find
+
+local coroutineRunning = coroutine.running
+local coroutineYield = coroutine.yield
+
+local taskDelay = task.delay
+local taskCancel = task.cancel
+
+function SignalConstructor.new()
+	return setmetatable({ _connections = {} :: { SignalConnection } }, { __index = SignalMethods })
+end
+
+local taskSpawn = task.spawn
+function SignalMethods:Fire<parameters...>(...: parameters...): parameters...
+	for _, connection in next, self._connections do
+		taskSpawn(connection[1], ...)
+	end; return ...
+end
+
+function SignalMethods:Invoke<parameters...>(...: parameters...): { any }
+	local responses = {}
+	for _, connection in next, self._connections do
+		responses[#responses + 1] = connection[1](...) or false
+	end; return responses
+end
+
+local Connection = {}
+function Connection:Disconnect()
+	local _, connections = unpack(self)
+
+	local connectionIndex = tableFind(connections, self)
+	if connectionIndex then
+		tableRemove(connections, connectionIndex)
+	end
+end
+
+function SignalMethods:Connect(func: () -> (), ...)
+	if ... then
+		local subFunction = func
+		local parameters = {...}
+		func = function() subFunction(unpack(parameters)) end 
+	end
+
+	local connections = self._connections
+	local SignalConnection = setmetatable({ func, connections }, { __index = Connection })
+	connections[#connections + 1] = SignalConnection
+	return SignalConnection
+end
+
+function SignalMethods:DisconnectAll()
+	local connections = self._connections
+	for connectionIndex in next, connections do
+		connections[connectionIndex] = nil
+	end
+end
+
+function SignalMethods:Wait(timeout: number?)
+	local thread = coroutineRunning()
+
+	local connection
+
+	local timeoutThread
+	if timeout then
+		timeoutThread = taskDelay(timeout, function() 
+			connection:Disconnect(); 
+			connection = nil; 
+
+			timeoutThread = nil;
+
+			taskSpawn(thread)
+		end)
+	end
+
+	connection = self:Connect(function(...)
+		connection:Disconnect()
+		taskSpawn(thread, ...)
+		if timeoutThread then 
+			taskCancel(timeoutThread);
+			timeoutThread = nil 
+		end
+	end)
+
+	return coroutineYield()
+end
+
+function SignalMethods:Once(func: () -> (), ...)
+	if ... then
+		local subFunction = func
+		local parameters = {...}
+		func = function() subFunction(unpack(parameters)) end 
+	end
+
+	local connection
+	connection = self:Connect(function(...)
+		connection:Disconnect()
+		connection = nil
+
+		taskSpawn(func, ...)
+	end)
+
+	return connection
+end
+
+function SignalMethods:Destroy()
+	self:DisconnectAll()
+
+	local connections = self._connections
+	for i in next, connections do
+		connections[i] = nil
+	end
+
+	for i in next, self do
+		self[i] = nil
+	end
+
+	setmetatable(self, nil)
+	return true
+end
+
+export type SignalConnection = typeof(Connection)
+export type Signal = typeof(SignalConstructor.new())
+
+return SignalConstructor]]></ProtectedString>
+</Properties>
+</Item>
+<Item class="ModuleScript" referent="RBX4JVOTAD5LEJW2KT2D909SH6WSTHOQEA2">
+<Properties>
+<string name="Name">RBXM</string>
+<string name="ScriptGuid">{7a2bb785-8381-4616-86c4-0d18d5a176fc}</string>
+<ProtectedString name="Source"><![CDATA[local httpService = game:GetService("HttpService")
+local scriptEditorService = game:GetService("ScriptEditorService")
+
+local RBXM = {}
+
+local function referent()
+	local chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	local result = ""
+	for i = 1, 32 do
+		local index = math.random(1, #chars)
+		result = result .. chars:sub(index, index)
+	end; return result
+end
+
+local function loopInstances(bufferArray: { string }, instances: { Instance })
+	for _, instance in next, instances do
+		bufferArray[#bufferArray + 1] = `<Item class="{instance.ClassName}" referent="RBX{referent()}">`
+		bufferArray[#bufferArray + 1] = `<Properties>`
+		bufferArray[#bufferArray + 1] = `<string name="Name">{instance.Name}</string>`
+		if instance:IsA("BaseScript") or instance:IsA("ModuleScript") then
+			bufferArray[#bufferArray + 1] = `<string name="ScriptGuid">{httpService:GenerateGUID()}</string>`
+			bufferArray[#bufferArray + 1] = `<ProtectedString name="Source"><![CDATA[` .. scriptEditorService:GetEditorSource(instance) .. `]]></ProtectedString>`
+		end
+		bufferArray[#bufferArray + 1] = `</Properties>`
+		loopInstances(bufferArray, instance:GetChildren())
+		bufferArray[#bufferArray + 1] = `</Item>`
+	end
+end
+
+function RBXM:GetXML(instances: { Instance })
+	local bufferArray = {
+		`<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">`,
+		`<Meta name="ExplicitAutoJoints">true</Meta>`,
+	}
+	
+	loopInstances(bufferArray, instances)
+	
+	bufferArray[#bufferArray + 1] = `</roblox>`
+	return table.concat(bufferArray, "\n")
+end
+
+export type RBXMInstance = {
+	ClassName: string,
+	Referent: string,
+	Name: string,
+	
+	Children: RBXMInstance,
+	Parent: RBXMInstance?,
+	
+	Source: string?,
+	ScriptGuid: string?
+}
+
+local function parseItem(xmlItem)
+	local instance = {}
+
+	local className, referent = xmlItem:match('<Item class="(.-)" referent="(.-)"')
+	if className then
+		instance.ClassName = className
+	end; if referent then
+		instance.Referent = referent
+	end
+
+	local name = xmlItem:match('<string name="Name">(.-)</string>')
+	if name then
+		instance.Name = name
+	end
+
+	if xmlItem:match('<string name="ScriptGuid">') then
+		instance.ScriptGuid = xmlItem:match('<string name="ScriptGuid">(.-)</string>')
+		local source = xmlItem:match('<ProtectedString name="Source"><!%[CDATA%[(.-)%]%]></ProtectedString>')
+		if source then
+			instance.Source = source
+		end
+	end
+
+	return instance
+end
+
+local function extractItems(xml: string)
+	local pointer = 1
+	local function nextTag()
+		return xml:find("<", pointer)
+	end
+
+	local function parseItem()
+		local class, referent = xml:match('<Item class="(.-)" referent="(.-)">', pointer)
+		local startTag = xml:find('<Item class="(.-)" referent="(.-)">', pointer)
+		if not startTag then return end
+
+		local instance = {
+			ClassName = class,
+			Referent = referent,
+		}
+
+		pointer = xml:find("<Properties>", startTag)
+		if not pointer then return end
+
+		local propClose = xml:find("</Properties>", pointer)
+		local propBlock = xml:sub(pointer, propClose + 12)
+		pointer = propClose + 13
+
+		instance.Name = propBlock:match('<string name="Name">(.-)</string>')
+		instance.ScriptGuid = propBlock:match('<string name="ScriptGuid">(.-)</string>')
+		instance.Source = propBlock:match('<ProtectedString name="Source"><!%[CDATA%[(.-)%]%]></ProtectedString>')
+
+		instance.Children = {}
+
+		while true do
+			local nextItemStart = xml:find("<Item", pointer)
+			local nextItemEnd = xml:find("</Item>", pointer)
+			if not nextItemStart or nextItemEnd < nextItemStart then
+				pointer = nextItemEnd and (nextItemEnd + 7) or pointer
+				break
+			end
+
+			local child = parseItem()
+			if child then
+				child.Parent = instance
+				instance.Children[#instance.Children + 1] = child
+			end
+		end
+
+		return instance
+	end
+
+	local results = {}
+	while pointer < #xml do
+		local i = parseItem()
+		if i then results[#results + 1] = i; for _, v in next, i.Children do results[#results + 1] = v end else break end
+	end
+	
+	return results
+end
+
+function RBXM:GetInstances(content: string): { RBXMInstance }
+	return extractItems(content)
+end
+
+
+return RBXM]]></ProtectedString>
+</Properties>
+</Item>
+<Item class="ModuleScript" referent="RBXHZPM98SJV9SKTSYWSMYE7W8E20VGXLVZ">
+<Properties>
+<string name="Name">Logs</string>
+<string name="ScriptGuid">{f3989045-0e41-4712-89b0-ab7facb00ba1}</string>
+<ProtectedString name="Source"><![CDATA[local Signal = require("./Signal")
+
+local Logs = {}
+local LogMethods = {}
+
+local tableRemove = table.remove
+local tableFind = table.find
+
+function LogMethods.Continue(self: Logs, log: string)
+	local lines = log:split("\n")
+	if self[#self] then
+		self[#self] ..= lines[1]
+	else
+		self[#self + 1] = lines[1]
+	end; for i = 2, #lines do
+		self:Push(lines[i])
+	end
+	return lines
+end
+
+function LogMethods.Push(self: Logs, log: string)
+	local index = #self + 1
+	self[index] = log
+	return index
+end
+
+function LogMethods.Find(
+	self: Logs,
+	options: {
+		exact: string?,
+		startsWith: string?,
+		endsWith: string?,
+		contains: string?,
+		lowercaseExact: string?,
+		lowercaseContains: string?
+	}
+)
+	for index, log in next, self do
+		if options.exact and log == options.exact then
+			return index, log
+		elseif options.startsWith and log:sub(1, #options.startsWith) == options.startsWith then
+			return index, log
+		elseif options.endsWith and log:sub(-#options.endsWith) == options.endsWith then
+			return index, log
+		elseif options.contains and log:find(options.contains) then
+			return index, log
+		elseif options.lowercaseExact and log:lower() == options.lowercaseExact:lower() then
+			return index, log
+		elseif options.lowercaseContains and log:lower():find(options.lowercaseContains:lower()) then
+			return index, log
+		end
+	end
+end
+
+function LogMethods.RemoveIndex(self: Logs, index: number): string
+	local value = tableRemove(self, index)
+	return value
+end
+
+function LogMethods.RemoveValue(self: Logs, value: string): number
+	local index = self:Find({ exact = value })
+	if index then self:RemoveIndex(index) end
+	return index
+end
+
+function LogMethods.Clear(self: Logs)
+	local itemsCleared = #self
+	for i = 1, itemsCleared do
+		self[i] = nil
+	end
+	return itemsCleared
+end
+
+function LogMethods.Destroy(self: Logs)
+	for i in next, self do self[i] = nil end
+	setmetatable(self, {})
+	return nil
+end
+
+function Logs.new(events: boolean?)
+	return setmetatable({}, { __index = LogMethods })
+end
+
+export type Logs = typeof(Logs.new())
+
+return Logs]]></ProtectedString>
+</Properties>
+</Item>
 </Item>
 </Item>
 </roblox>
