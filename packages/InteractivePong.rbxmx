@@ -1,0 +1,421 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXX1H59BOTXHIFMAQSKZFB9OEHBIZUWODU">
+        <Properties>
+            <string name="Name">InteractivePong</string>
+            <string name="ScriptGuid">{42510912-0fd2-48c2-92ea-57365cbe8f50}</string>
+            <ProtectedString name="Source"><![CDATA[local InteractivePong = {}
+local BallConstructor = {}
+
+local Player = {}
+local Border = {}
+
+local Signal = require(script:WaitForChild("Signal"))
+
+local uDim2FromOffset = UDim2.fromOffset
+
+local vector2XAxis = Vector2.xAxis
+local vector2YAxis = Vector2.yAxis
+
+local vector2Zero = Vector2.zero
+local vector2New = Vector2.new
+
+local mathMin = math.min
+local mathClamp = math.clamp
+local mathSign = math.sign
+
+local sin = math.sin
+local cos = math.cos
+local pi = math.pi
+
+local tableFind = table.find
+local tableInsert = table.insert
+
+local standardScreenSize = vector2New(640, 480)
+
+function Player.new(position: Vector2?, size: Vector2?, speed: number?, reflectAngle: number?)
+	local self = setmetatable({}, { __index = Player })
+	self.IsPlayer = true
+	self.InputDirection = vector2Zero
+	self.Position = position or vector2Zero
+	self.Size = size or vector2New(10, 75)
+	self.ReflectAngle = reflectAngle or 4
+	self.Speed = speed or 500
+	return self
+end
+
+function Player:MoveUp(multiplier: number?)
+	self.InputDirection = -vector2YAxis * (multiplier or 1)
+	return self
+end
+
+function Player:MoveDown(multiplier: number?)
+	self.InputDirection = vector2YAxis * (multiplier or 1)
+	return self
+end
+
+function Player:GetUDim2Position()
+	local position = self.Position
+	return uDim2FromOffset(position.X, position.Y)
+end
+
+function Player:GetUDim2Size()
+	local size = self.Size
+	return uDim2FromOffset(size.X, size.Y)
+end
+
+function Border.new(position: Vector2, size: Vector2)
+	local self = setmetatable({}, { __index = Border })
+	self.IsBorder = true
+	self.Position = position
+	self.Size = size
+	return self
+end
+
+function Border:GetUDim2Position()
+	local position = self.Position
+	return uDim2FromOffset(position.X, position.Y)
+end
+
+function Border:GetUDim2Size()
+	local size = self.Size
+	return uDim2FromOffset(size.X, size.Y)
+end
+
+function BallConstructor.new(position: Vector2?, size: Vector2?, speed: number?, xPaddleReflectionFunction: (number) -> number)
+	local self = setmetatable({}, { __index = BallConstructor })
+	self.IsBall = true
+	self.Position = position or vector2Zero
+	self.Size = size or vector2New(20, 20)
+
+	self.Velocity = vector2Zero
+	self.Speed = speed or 750
+	self.PaddleReflectionFunction = xPaddleReflectionFunction or mathSign
+	
+	self.OnCollided = Signal.new()
+	
+	return self
+end
+
+function BallConstructor:SetDirection(direction: number)
+	self.Velocity = vector2XAxis * direction
+	return self
+end
+
+function BallConstructor:ComputeCollisions(colliders, ignoreColliders)
+	colliders = colliders or {}
+	ignoreColliders = ignoreColliders or {}
+
+	local ballPosition = self.Position
+	local ballSize = self.Size
+	local ballVelocity = self.Velocity
+
+	local ballVelocityX = ballVelocity.X
+	local ballVelocityY = ballVelocity.Y
+
+	local ballPositionX = ballPosition.X
+	local ballPositionY = ballPosition.Y
+
+	local ballSizeX = ballSize.X
+	local ballSizeY = ballSize.Y
+
+	local ballMinX = ballPositionX - ballSizeX / 2
+	local ballMaxX = ballPositionX + ballSizeX / 2
+	local ballMinY = ballPositionY - ballSizeY / 2
+	local ballMaxY = ballPositionY + ballSizeY / 2
+
+	local reflection = vector2Zero
+	local normal = vector2Zero
+	local hit = nil
+	
+	local collisionData = {
+		Reflection = reflection,
+		Normal = normal,
+		Hit = hit
+	}
+	
+	for colliderIndex = 1, #colliders do
+		local collider = colliders[colliderIndex]
+		if tableFind(ignoreColliders, collider) then continue end
+
+		local colliderPosition = collider.Position
+		local colliderSize = collider.Size
+
+		local colliderPositionX = colliderPosition.X
+		local colliderPositionY = colliderPosition.Y
+
+		local colliderSizeX = colliderSize.X
+		local colliderSizeY = colliderSize.Y
+
+		local colliderMinX = colliderPositionX - colliderSizeX / 2
+		local colliderMaxX = colliderPositionX + colliderSizeX / 2
+		local colliderMinY = colliderPositionY - colliderSizeY / 2
+		local colliderMaxY = colliderPositionY + colliderSizeY / 2
+
+		if ballMaxX > colliderMinX and ballMinX < colliderMaxX and ballMaxY > colliderMinY and ballMinY < colliderMaxY then
+			hit = collider
+
+			local overlapX = mathMin(ballMaxX - colliderMinX, colliderMaxX - ballMinX)
+			local overlapY = mathMin(ballMaxY - colliderMinY, colliderMaxY - ballMinY)
+
+			local manualNormal = collider.Normal
+			if manualNormal then
+				normal = manualNormal
+			else
+				if overlapX < overlapY then
+					normal = vector2New(ballPositionX > colliderPosition.X and 1 or -1, 0)
+				else
+					normal = vector2New(0, ballPositionY > colliderPosition.Y and 1 or -1)
+				end
+			end
+
+			if collider.IsPlayer then
+				local paddleCenterY = colliderPosition.Y
+				local hitPosY = ballPosition.Y
+
+				local relativeHitPos = (hitPosY - paddleCenterY) / (colliderSize.Y / 2)
+				relativeHitPos = mathClamp(relativeHitPos, -1, 1)
+
+				local angle = relativeHitPos * pi / collider.ReflectAngle
+				local sinAngle = sin(angle)
+				local cosAngle = cos(angle)
+
+				local basicReflectionUnit = vector2New(-ballVelocityX, ballVelocityY).Unit
+				local basicUnitX = basicReflectionUnit.X
+				local basicUnitY = basicReflectionUnit.Y
+
+				reflection = vector2New(self.PaddleReflectionFunction(basicUnitX * cosAngle - basicUnitY * sinAngle), (basicUnitX * sinAngle + basicUnitY * cosAngle) * normal.X).Unit
+			else
+				local velocityDotNormal = ballVelocity:Dot(normal)
+				reflection = ballVelocity - 2 * velocityDotNormal * normal
+			end
+			
+			collisionData.Reflection = reflection
+			collisionData.Normal = normal
+			collisionData.Hit = hit
+			
+			self.OnCollided:Fire(collisionData)
+			return collisionData
+		end
+	end
+
+	collisionData.Reflection = reflection
+	collisionData.Normal = normal
+	collisionData.Hit = hit
+	
+	return collisionData
+end
+
+function BallConstructor:ComputeLimitedBounds(screenSize: Vector2)
+	local ballPosition: Vector2 = self.Position
+	
+	self.Position = ballPosition:Max(vector2Zero):Min(screenSize)
+	return self
+end
+
+function BallConstructor:GetUDim2Position()
+	local position = self.Position
+	return uDim2FromOffset(position.X, position.Y)
+end
+
+function BallConstructor:GetUDim2Size()
+	local size = self.Size
+	return uDim2FromOffset(size.X, size.Y)
+end
+
+function InteractivePong.new(
+	settings: {
+		ScreenSize: Vector2?, -- Screen Size in pixels
+		PaddleSize: Vector2?, -- Size of Player Paddle in pixels
+		BallSize: Vector2?, -- Size of Ball in pixels
+
+		BorderType: string?, -- "All", "Sides"
+	}
+)
+	settings = settings or {}
+	local self = setmetatable({}, { __index = InteractivePong })
+	self.IsPongGame = true
+
+	self.TickSpeed = 1
+	self.BorderThickness = 35
+
+	self.BorderType = settings.BorderType or "Sides"
+
+	self:SetScreenSize(settings.ScreenSize or standardScreenSize)
+
+	local paddleSize = settings.PaddleSize or vector2New(10, 75)
+	local halfPaddleSizeX = paddleSize.X/2
+	
+	self.Players = { 
+		Player.new(vector2XAxis * halfPaddleSizeX, paddleSize),
+		Player.new(vector2XAxis * (self.ScreenSize.X - halfPaddleSizeX), paddleSize)
+	}
+	
+	self.Ball = BallConstructor.new(self.ScreenSize/2, settings.BallSize)
+
+	self.OnReset = Signal.new()
+	self.Stepped = Signal.new()
+	self.Ended = Signal.new()
+
+	self:Reset()
+	
+	return self
+end
+
+function InteractivePong:Reset()
+	local players = self.Players
+	local numberOfPlayers = #players
+	for i = 1, numberOfPlayers do
+		local player = players[i]
+		player.Position = vector2New(player.Position.X, self.ScreenSize.Y/2)
+	end
+
+	local ball = self.Ball
+	ball.Position = self.ScreenSize/2
+	ball.Velocity = vector2XAxis
+
+	local gameColliders = { unpack(self.Borders) }
+	for playerIndex = 1, #players do
+		gameColliders[#gameColliders + 1] = players[playerIndex]
+	end
+
+	self.GameColliders = gameColliders
+	self.LastCollidedWith = nil
+
+	self.OnReset:Fire()
+
+	return self
+end
+
+function InteractivePong:UpdatePaddleXPositions()
+	local players = self.Players
+	
+	players[1].Position = vector2XAxis * players[1].Size.X/2 + vector2YAxis * players[1].Position
+	players[2].Position = vector2XAxis * (self.ScreenSize.X - players[2].Size.X/2) + vector2YAxis * players[2].Position
+end
+
+function InteractivePong:SetScreenSize(screenSize: Vector2)
+	self.ScreenSize = screenSize
+
+	local borderThickness = self.BorderThickness
+	local borderHalfThickness = borderThickness/2
+
+	local borderType = self.BorderType
+
+	local borders = { 
+		Border.new(vector2New(screenSize.X/2, -borderHalfThickness), vector2New(screenSize.X, borderThickness)), -- Top
+		Border.new(vector2New(screenSize.X/2, screenSize.Y + borderHalfThickness), vector2New(screenSize.X, borderThickness)), -- Bottom
+	}
+
+	if borderType == "All" then
+		for _, border in next, 
+			{
+				Border.new(vector2New(-borderHalfThickness, screenSize.Y/2), vector2New(borderThickness, screenSize.Y)), -- Left
+				Border.new(vector2New(screenSize.X + borderHalfThickness, screenSize.Y/2), vector2New(borderThickness, screenSize.Y)) -- Right
+			} do
+			tableInsert(borders, border)
+		end
+	end
+
+	self.Borders = borders
+
+	return self
+end
+
+function InteractivePong:GetScreenSizeFromSurfaceGui(surfaceGui: SurfaceGui)
+	local partSize = surfaceGui.Parent.Size
+	local screenSize = surfaceGui.PixelsPerStud * vector2New(partSize.X, partSize.Y)
+	return screenSize
+end
+
+function InteractivePong:GetPaddleSizeFromFrame(frame: Frame)
+	return frame.AbsoluteSize
+end
+
+function InteractivePong:GetBallSizeFromFrame(frame: Frame)
+	return frame.AbsoluteSize
+end
+
+function InteractivePong:Step(deltaTime: number)	
+	local players = self.Players
+	local screenSize: Vector2 = self.ScreenSize
+	local tickSpeed: number = self.TickSpeed
+
+	deltaTime *= tickSpeed
+
+	for i = 1, #players do
+		local player = players[i]
+
+		local distancePadding = vector2YAxis * player.Size.Y/2
+		player.Position = (player.Position + player.InputDirection * deltaTime * player.Speed):Max(vector2Zero + distancePadding):Min(screenSize - distancePadding)
+		player.InputDirection = vector2Zero
+	end
+
+
+	local ball = self.Ball
+	
+	local collisionData = ball:ComputeCollisions(self.GameColliders, { self.LastCollidedWith })
+	local collidedWith = collisionData.Hit
+	if collidedWith then
+		ball.Velocity = collisionData.Reflection
+		self.LastCollidedWith = collidedWith
+	end
+	
+	ball.Position += ball.Velocity * ball.Speed * deltaTime
+	
+	if ball.Position.X > screenSize.X then
+		self.Ended:Fire(players[1])
+	elseif ball.Position.X < 0 then
+		self.Ended:Fire(players[2])
+	end
+	
+	ball:ComputeLimitedBounds(screenSize)
+
+	self.Stepped:Fire(deltaTime)
+	return self
+end
+
+InteractivePong.Player = Player
+InteractivePong.BallConstructor = BallConstructor
+return InteractivePong]]></ProtectedString>
+        </Properties>
+        <Item class="ModuleScript" referent="RBXM4Z4LZFHHLH9RDYCLNMETZPP7PDB0IGQ">
+            <Properties>
+                <string name="Name">Signal</string>
+                <string name="ScriptGuid">{d7a74601-8367-468c-ab6e-602d8ffeee36}</string>
+                <ProtectedString name="Source"><![CDATA[local Signal = {}
+
+function Signal.new()
+	local signalDictionary = { Connections = {} }
+
+	function signalDictionary:Fire(...)
+		for _, connection in next, self.Connections do
+			task.spawn(connection, ...)
+		end
+	end
+
+	function signalDictionary:Connect(callback)
+		table.insert(self.Connections, callback)
+
+		local connectionDictionary = {}
+		function connectionDictionary:Disconnect()
+			if table.find(signalDictionary.Connections, callback) then
+				table.remove(signalDictionary.Connections, table.find(signalDictionary.Connections, callback))
+			end
+		end; return connectionDictionary
+	end
+
+	function signalDictionary:DisconnectAll()
+		for connectionIndex, _ in next, self.Connections do
+			self.Connections[connectionIndex] = nil
+		end
+	end
+
+	return signalDictionary
+end
+
+return Signal]]></ProtectedString>
+            </Properties>
+        </Item>
+    </Item>
+</roblox>
