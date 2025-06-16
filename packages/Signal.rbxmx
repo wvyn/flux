@@ -1,0 +1,136 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXLDZKZDJIWRZ54WLM81L6JI3NRW9QRRFS">
+        <Properties>
+            <string name="Name">Signal</string>
+            <string name="ScriptGuid">{7082621e-465f-4556-87d6-084ab6ee9798}</string>
+            <ProtectedString name="Source"><![CDATA[local SignalConstructor = {}
+local SignalMethods = {}
+
+local tableRemove = table.remove
+local tableFind = table.find
+
+local coroutineRunning = coroutine.running
+local coroutineYield = coroutine.yield
+
+local taskDelay = task.delay
+local taskCancel = task.cancel
+
+function SignalConstructor.new()
+	return setmetatable({ _connections = {} :: { SignalConnection } }, { __index = SignalMethods })
+end
+
+local taskSpawn = task.spawn
+function SignalMethods:Fire<parameters...>(...: parameters...): parameters...
+	for _, connection in next, self._connections do
+		taskSpawn(connection[1], ...)
+	end; return ...
+end
+
+function SignalMethods:Invoke<parameters...>(...: parameters...): { any }
+	local responses = {}
+	for _, connection in next, self._connections do
+		responses[#responses + 1] = connection[1](...) or false
+	end; return responses
+end
+
+local Connection = {}
+function Connection:Disconnect()
+	local _, connections = unpack(self)
+
+	local connectionIndex = tableFind(connections, self)
+	if connectionIndex then
+		tableRemove(connections, connectionIndex)
+	end
+end
+
+function SignalMethods:Connect(func: () -> (), ...)
+	if ... then
+		local subFunction = func
+		local parameters = {...}
+		func = function() subFunction(unpack(parameters)) end 
+	end
+
+	local connections = self._connections
+	local SignalConnection = setmetatable({ func, connections }, { __index = Connection })
+	connections[#connections + 1] = SignalConnection
+	return SignalConnection
+end
+
+function SignalMethods:DisconnectAll()
+	local connections = self._connections
+	for connectionIndex in next, connections do
+		connections[connectionIndex] = nil
+	end
+end
+
+function SignalMethods:Wait(timeout: number?)
+	local thread = coroutineRunning()
+
+	local connection
+
+	local timeoutThread
+	if timeout then
+		timeoutThread = taskDelay(timeout, function() 
+			connection:Disconnect(); 
+			connection = nil; 
+
+			timeoutThread = nil;
+
+			taskSpawn(thread)
+		end)
+	end
+
+	connection = self:Connect(function(...)
+		connection:Disconnect()
+		taskSpawn(thread, ...)
+		if timeoutThread then 
+			taskCancel(timeoutThread);
+			timeoutThread = nil 
+		end
+	end)
+
+	return coroutineYield()
+end
+
+function SignalMethods:Once(func: () -> (), ...)
+	if ... then
+		local subFunction = func
+		local parameters = {...}
+		func = function() subFunction(unpack(parameters)) end 
+	end
+
+	local connection
+	connection = self:Connect(function(...)
+		connection:Disconnect()
+		connection = nil
+
+		taskSpawn(func, ...)
+	end)
+
+	return connection
+end
+
+function SignalMethods:Destroy()
+	self:DisconnectAll()
+
+	local connections = self._connections
+	for i in next, connections do
+		connections[i] = nil
+	end
+
+	for i in next, self do
+		self[i] = nil
+	end
+
+	setmetatable(self, nil)
+	return true
+end
+
+export type SignalConnection = typeof(Connection)
+export type Signal = typeof(SignalConstructor.new())
+
+return SignalConstructor]]></ProtectedString>
+        </Properties>
+    </Item>
+</roblox>
