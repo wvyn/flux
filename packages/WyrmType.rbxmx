@@ -1,0 +1,23 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXPN2ZX6MLXHEFT5VP9LJQZHJ1M3R2II55">
+        <Properties>
+            <string name="Name">WyrmType</string>
+            <string name="ScriptGuid">{7783ea1c-fd6c-4035-993d-1239e0e83d0b}</string>
+            <ProtectedString name="Source"><![CDATA[--!strict
+
+local WyrmType = {}
+
+export type function getChildren(ty: type)
+	local union = nil
+	for property in ty:properties() do
+		union = if union then types.unionof(union, property) else property
+	end
+
+	return if union then union else types.singleton(nil)
+end
+
+return WyrmType]]></ProtectedString>
+        </Properties>
+    </Item>
+</roblox>
