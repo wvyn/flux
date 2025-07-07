@@ -1,0 +1,134 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXIGZEXHDNE0JBWM9RZKI63EK1UJHP7EJH">
+        <Properties>
+            <string name="Name">EffectManager</string>
+            <string name="ScriptGuid">{d8c1bf9a-03cd-4f3b-b868-c39d955d0744}</string>
+            <ProtectedString name="Source"><![CDATA[local runService = game:GetService("RunService")
+
+local isServer = runService:IsServer()
+local isClient = runService:IsClient()
+
+local Effect = require("@self/Effect")
+local Signal = require("./Signal")
+
+local EffectManager = { Effect = Effect, ManagerAdded = Signal.new() }
+local EffectManagerMethods = { Effect = Effect }
+
+local EffectManagers = {}
+function EffectManager.new(identifier: string)
+	local existingManager = EffectManager.fromIdentifier(identifier)
+	if existingManager then return existingManager end
+	
+	local effectManager = setmetatable({
+		Identifier = identifier,
+		Effects = {},
+		Events = {
+			EffectAdded = Signal.new(),
+			EffectRemoved = Signal.new(),
+			Destroying = Signal.new(),
+		}
+	}, { __index = EffectManagerMethods })
+	EffectManagers[identifier] = effectManager
+	EffectManager.ManagerAdded:Fire(effectManager)
+	return effectManager
+end
+
+function EffectManager.fromIdentifier(identifier: string)
+	return EffectManagers[identifier]
+end
+
+local _replicateEffect = script:WaitForChild("ReplicateEffect")
+function EffectManagerMethods.AddEffect(self: EffectManager, effect: Effect.Effect, noReplicate: boolean?)
+	self.Effects[#self.Effects + 1] = effect
+	if isServer and not noReplicate then
+		_replicateEffect:FireAllClients(self.Identifier, "INSERT", effect)
+	end
+	
+	self.Events.EffectAdded:Fire(effect, noReplicate)
+	return true
+end
+
+function EffectManagerMethods.RemoveEffect(self: EffectManager, effect: Effect.Effect, noReplicate: boolean?)
+	local foundEffect, index = self:GetEffect(effect)
+	if index then table.remove(self.Effects, index) end
+	if isServer and not noReplicate then
+		_replicateEffect:FireAllClients(self.Identifier, "REMOVE", foundEffect)
+	end; if index then
+		self.Events.EffectRemoved:Fire(foundEffect, noReplicate)
+		return true
+	end
+	return false
+end
+
+function EffectManagerMethods.GetEffect(self: EffectManager, effect: Effect.Effect)
+	local knownEffect: Effect.Effect, knownIndex: number
+	for index, targetEffect in next, self.Effects do
+		if targetEffect.Identifier == effect then return targetEffect, index end
+		if targetEffect.Name == effect.Name then knownEffect = targetEffect; knownIndex = index end
+	end; return knownEffect, knownIndex
+end
+
+function EffectManagerMethods.ReplicateEffectsTo(self: EffectManager, player: Player)
+	if isServer then
+		_replicateEffect:FireClient(player, self.Identifier, "SET", self.Effects)
+		return true
+	end; return false
+end
+
+function EffectManagerMethods.Destroy(self: EffectManager)
+	self.Events.Destroying:Fire()
+	_replicateEffect:FireAllClients(self.Identifier, "DESTROY")
+	EffectManagers[self.Identifier] = nil
+	for _, event in next, self.Events do
+		event:Destroy()
+	end; for index in next, self do
+		self[index] = nil
+	end
+	setmetatable(self, nil)
+end
+
+export type EffectManager = typeof(EffectManager.new())
+export type Effect = Effect.Effect
+
+if isClient then
+	_replicateEffect.OnClientEvent:Connect(function(identifier: string, dataType: string, effect: Effect.Effect)
+		local manager = EffectManager.new(identifier)
+		if dataType == "INSERT" then
+			manager:AddEffect(effect)
+		elseif dataType == "REMOVE" then
+			manager:RemoveEffect(effect)
+		elseif dataType == "DESTROY" then
+			manager:Destroy()
+		elseif dataType == "SET" then
+			for _, effect: Effect.Effect in next, effect do
+				manager:AddEffect(effect)
+			end
+		end
+	end)
+end
+
+return EffectManager]]></ProtectedString>
+        </Properties>
+        <Item class="ModuleScript" referent="RBX38ON06BOBADTB9IWBAX0IK96C2NGLZNQ">
+            <Properties>
+                <string name="Name">Effect</string>
+                <string name="ScriptGuid">{b7a36b52-a008-4e3f-a4ef-a63ee66f200d}</string>
+                <ProtectedString name="Source"><![CDATA[local Effect = {}
+
+function Effect.new(name: string, value: any, identifier: string?)
+	return { Name = name, Value = value, Disabled = false, Identifier = identifier }
+end
+
+export type Effect = typeof(Effect.new())
+
+return Effect]]></ProtectedString>
+            </Properties>
+        </Item>
+        <Item class="RemoteEvent" referent="RBX6GQQ6B05OPJ2Z59467C8XNQQ8OZH42RJ">
+            <Properties>
+                <string name="Name">ReplicateEffect</string>
+            </Properties>
+        </Item>
+    </Item>
+</roblox>
