@@ -1,0 +1,213 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBX2A8ER5OJH7M3F1BVBQG1UXBOTF6I8OPY">
+        <Properties>
+            <string name="Name">InstanceEncoding</string>
+            <string name="ScriptGuid">{b1cfbb4d-372a-432f-84dc-f0ffcab99133}</string>
+            <ProtectedString name="Source"><![CDATA[local assetService = game:GetService("AssetService")
+
+local Signal = require("./Signal")
+
+local InstanceEncoding = {}
+
+local readOnly = {
+	-- Instance
+	"ClassName",
+	
+	-- Custom
+	"Children",
+	"Tags",
+	"Attributes",
+	
+	-- MeshPart
+	"MeshContent",
+	"TextureContent"
+}
+
+local function encodeBaseInstance(instance: Instance): EncodedBaseInstance
+	return {
+		ClassName = instance.ClassName,
+		Name = instance.Name,
+		Children = {},
+		Tags = instance:GetTags(),
+		Attributes = instance:GetAttributes()
+	}
+end
+
+local function encodeBasePart(instance: BasePart): EncodedBasePart
+	local basePart = encodeBaseInstance(instance)
+	
+	for i, v in next, 
+		{
+			Anchored = instance.Anchored,
+			CanCollide = instance.CanCollide,
+			CanQuery = instance.CanQuery,
+			CanTouch = instance.CanTouch,
+			CastShadow = instance.CastShadow,
+			PivotOffset = instance.PivotOffset,
+			CollisionGroup = instance.CollisionGroup,
+			Reflectance = instance.Reflectance,
+			CFrame = instance.CFrame,
+			Color = instance.Color,
+			Material = instance.Material,
+			Massless = instance.Massless,
+			Transparency = instance.Transparency,
+			Size = instance.Size,
+		} do
+		basePart[i] = v
+	end
+
+	return basePart
+end
+
+local function applyDecodedProperties(instance: Instance, properties: EncodedBasePart)
+	for propertyIndex, propertyValue in next, properties do
+		if table.find(readOnly, propertyIndex) then continue end
+		instance[propertyIndex] = propertyValue
+	end
+	
+	for _, tag in next, properties.Tags do
+		instance:AddTag(tag)
+	end; for attributeName, value in next, properties.Attributes do
+		instance:SetAttribute(attributeName, value)
+	end
+end
+
+local function encodeClothing(clothing: Clothing)
+	local encodedClothing = encodeBaseInstance(clothing)
+	encodedClothing.Color3 = clothing.Color3
+	
+	local templateIndex = `{clothing:IsA("Pants") and "Pants" or "Shirt"}Template`
+	encodedClothing[templateIndex] = clothing[templateIndex]
+	
+	return encodedClothing
+end
+
+local function encodeValueBase(valueBase: ValueBase)
+	local encodedValueBase = encodeBaseInstance(valueBase)
+	encodedValueBase.Value = valueBase
+	return encodedValueBase
+end
+
+function InstanceEncoding.EncodeInstance(self: InstanceEncoding, instance: Instance)
+	local encodedInstance: EncodedBasePart
+	if instance:IsA("BasePart") then
+		local basePart = encodeBasePart(instance)
+		if instance:IsA("MeshPart") then
+			basePart.MeshContent = instance.MeshContent
+			basePart.TextureContent = instance.TextureContent
+		end
+		encodedInstance = basePart
+	elseif instance:IsA("Model") or instance:IsA("Folder") then
+		encodedInstance = encodeBaseInstance(instance)
+	elseif instance:IsA("Clothing") then
+		encodedInstance = encodeClothing(instance)
+	elseif instance:IsA("ValueBase") then
+		encodedInstance = encodeValueBase(instance)
+	end
+	
+	if encodedInstance then
+		local children = encodedInstance.Children
+		for _, instanceChildren in next, instance:GetChildren() do
+			children[#children + 1] = self:EncodeInstance(instanceChildren)
+		end
+	end
+	
+	return encodedInstance
+end
+
+function InstanceEncoding.DecodeInstance(self: InstanceEncoding, encodedInstance: EncodedBasePart, responseForward: DecodeResponse?): DecodeResponse
+	local instance: Instance
+	if encodedInstance.ClassName == "MeshPart" then
+		local meshPart = assetService:CreateMeshPartAsync(encodedInstance.MeshContent)
+		applyDecodedProperties(meshPart, encodedInstance)
+		instance = meshPart
+	elseif encodedInstance.ClassName == "Part" then
+		local part = Instance.new(encodedInstance.ClassName)
+		applyDecodedProperties(part, encodedInstance)
+		instance = part
+	else
+		local container = Instance.new(encodedInstance.ClassName)
+		applyDecodedProperties(container, encodedInstance)
+		instance = container
+	end
+	
+	responseForward = responseForward or {}
+	local response = {
+		IsLoaded = #encodedInstance.Children == 0,
+		LoadedIndex = 1,
+		Instance = instance,
+		
+		Threads = {} :: { thread },
+		
+		-- Events
+		DescendantLoaded = responseForward.DescendantLoaded or Signal.new(),
+		ChildLoaded = Signal.new(),
+		Loaded = Signal.new(),
+	}
+	
+	for _, children in next, encodedInstance.Children do
+		response.Threads[#response.Threads + 1] = task.spawn(function()
+			local childrenInstance = self:DecodeInstance(children, response)
+			if not childrenInstance.IsLoaded then childrenInstance.Loaded:Wait() end
+			childrenInstance.Instance.Parent = instance
+			
+			response.LoadedIndex += 1
+			if response.LoadedIndex - 1 == #encodedInstance.Children then
+				response.IsLoaded = true
+				response.Loaded:Fire(childrenInstance)
+			end
+			
+			response.ChildLoaded:Fire(childrenInstance)
+			response.DescendantLoaded:Fire(childrenInstance)
+		end)
+	end
+	
+	return response
+end
+
+export type DecodeResponse = {
+	IsLoaded: boolean,
+	LoadedIndex: number,
+	Instance: Instance,
+	
+	DescendantLoaded: Signal.Signal,
+	ChildLoaded: Signal.Signal,
+	Loaded: Signal.Signal
+}
+
+export type EncodedBaseInstance = {
+	ClassName: string,
+	Name: string,
+	Children: { EncodedBaseInstance | EncodedBasePart }
+}
+
+export type EncodedBasePart = {
+	-- BaseInstance
+	ClassName: string,
+	Name: string,
+	Children: { EncodedBaseInstance | EncodedBasePart },
+	
+	-- BasePart
+	Anchored: boolean,
+	CanCollide: boolean,
+	CanQuery: boolean,
+	CanTouch: boolean,
+	CastShadow: boolean,
+	PivotOffset: Vector3,
+	CollisionGroup: string,
+	Reflectance: number,
+	CFrame: CFrame,
+	Color: Color3,
+	Material: Enum.Material,
+	Massless: boolean,
+	Transparency: number,
+	Size: Vector3
+}
+
+export type InstanceEncoding = typeof(InstanceEncoding)
+
+return InstanceEncoding]]></ProtectedString>
+        </Properties>
+    </Item>
+</roblox>
