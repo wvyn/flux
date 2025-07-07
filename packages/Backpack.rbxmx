@@ -1,0 +1,88 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXNY2PFIZT3WOQFD217AIBD1HKHGF24826">
+        <Properties>
+            <string name="Name">Backpack</string>
+            <string name="ScriptGuid">{a8d79717-7bcd-4be0-b00d-7ddd4c9194a7}</string>
+            <ProtectedString name="Source"><![CDATA[local Item = require("./Item")
+local Signal = require("./Signal")
+
+local Backpack = {}
+local BackpackMethods = {}
+
+local tableFind = table.find
+local tableRemove = table.remove
+
+function Backpack.new(equipment: Instance, storage: Instance)
+	local backpack = setmetatable({
+		Storage = storage,
+		Equipment = equipment,
+		
+		States = {
+			CanEquip = true
+		},
+		
+		Events = {
+			ItemAdded = Signal.new(),
+			ItemRemoved = Signal.new(),
+			
+			ItemEquipped = Signal.new(),
+			ItemUnequipped = Signal.new(),
+		},
+
+		Items = {} :: { Item.Item },
+		Equipped = {} :: { Item.Item }
+	}, { __index = BackpackMethods })
+
+	return backpack
+end
+
+function BackpackMethods.AddItem(self: Backpack, item: Item.Item)
+	if tableFind(self.Items, item) then return end
+	local index = #self.Items + 1
+	self.Items[index] = item
+	self.Events.ItemAdded:Fire(item)
+	return index
+end
+
+function BackpackMethods.RemoveItem(self: Backpack, item: Item.Item)
+	local index = tableFind(self.Items, item)
+	if index then
+		tableRemove(self.Items, index)
+		self.Events.ItemRemoved:Fire(item)
+	end
+	return index
+end
+
+function BackpackMethods.Equip(self: Backpack, item: Item.Item)
+	if tableFind(self.Items, item) and not tableFind(self.Equipped, item) and self.States.CanEquip then
+		item:GetInstance().Parent = self.Equipment
+		self.Equipped[#self.Equipped + 1] = item
+		self.Events.Equipped:Fire(item)
+	end
+end
+
+function BackpackMethods.Unequip(self: Backpack, item: Item.Item)
+	local index = tableFind(self.Equipped, item)
+	if tableFind(self.Items, item) and index then
+		item:GetInstance().Parent = self.Storage
+		tableRemove(self.Equipped, index)
+		self.Events.Unequipped:Fire(item)
+	end
+end
+
+function BackpackMethods.UnequipItems(self: Backpack)
+	local equipped = self.Equipped
+	for index, item in next, equipped do
+		item:GetInstance().Parent = self.Storage
+		equipped[index] = nil
+		self.Events.Unequipped:Fire(item)
+	end
+end
+
+export type Backpack = typeof(Backpack.new())
+
+return Backpack]]></ProtectedString>
+        </Properties>
+    </Item>
+</roblox>
