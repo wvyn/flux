@@ -1,0 +1,114 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXOJYLHFZYBWU0WLQKZ20T003XQBOAET0S">
+        <Properties>
+            <string name="Name">Item</string>
+            <string name="ScriptGuid">{8ccde02d-ca2f-4278-af53-35d50a196e89}</string>
+            <ProtectedString name="Source"><![CDATA[local serverStorage = game:GetService("ServerStorage")
+
+local GUID = require("./GUID")
+local WyrmType = require("./WyrmType")
+
+local tableFind = table.find
+local tableRemove = table.remove
+
+local Item = {}
+local ItemMethods = {}
+local ItemPrivateMethods = {}
+
+function ItemPrivateMethods.AddInstance(self: Item, instance: Instance)
+	local instances = self.Instances
+	instances[#instances + 1] = instance
+	
+	local id = GUID.new()
+	self.Ids[#self.Ids + 1] = id
+	self._instanceBindIds[id] = instance
+	
+	return instance, id
+end
+
+function ItemPrivateMethods.RemoveInstance(self: Item, instance: Instance)
+	local instances = self.Instances
+	local indexInstance = tableFind(instances, instance)
+	if indexInstance then tableRemove(instances, indexInstance) end
+	
+	local id = self:GetInstanceId(instance)
+	self._instanceBindIds[id] = nil
+	
+	local indexId = tableFind(self.Ids, id)
+	if indexId then tableRemove(self.Ids, indexId) end
+	
+	return id
+end
+
+function ItemMethods.GetInstanceId(self: Item, instance: Instance): string
+	for id, bindInstance in next, self._instanceBindIds do
+		if bindInstance == instance then return id end
+	end
+end
+
+function ItemMethods.GetInstance(self: Item): (Instance, number)
+	local instance = self.Instances[1]
+	if instance then return instance end
+	
+	if self.InstanceTemplate then
+		return ItemPrivateMethods.AddInstance(self, self.InstanceTemplate:Clone())
+	end
+end
+
+function ItemMethods.HasInstance(self: Item, instance: Instance)
+	return tableFind(self.Instances, instance)
+end
+
+function ItemMethods.AddInstance(self: Item, instance: Instance?)
+	return ItemPrivateMethods.AddInstance(self, instance or self.InstanceTemplate:Clone())
+end
+
+function ItemMethods.RemoveInstance(self: Item, instance: Instance?)
+	return ItemPrivateMethods.RemoveInstance(self, instance)
+end
+
+function ItemMethods.Increment(self: Item, increment: number)
+	self.Count += increment
+end
+
+type ToolName = WyrmType.getChildren<typeof(serverStorage.Tools)>
+function Item.nilInstanceTemplate(name: ToolName)
+	return serverStorage.Tools:FindFirstChild(name)
+end
+
+function Item.new(
+	config: {
+		Name: ToolName,
+		Count: number?,
+		Instances: { Instance }?,
+		InstanceTemplate: Instance?
+	} | ToolName,
+	_count: number?
+)	
+	local name = typeof(config) == "string" and config or config.Name or config.Instances and config.Instances[1] and config.Instances[1].Name
+	assert(name, "Name not provided.")
+	
+	local ids = {}
+	local item = setmetatable({
+		Name = name,
+		Ids = ids,
+		Instances = {},
+		InstanceTemplate = config.InstanceTemplate or Item.nilInstanceTemplate(name),
+		Count = config.Count or _count or 1,
+		_instanceBindIds = {} :: { [string]: Instance }
+	}, { __index = ItemMethods })
+	
+	for _, instance in next, item.Instances do
+		ItemPrivateMethods.AddInstance(item, instance)
+	end
+	
+	return item
+end
+
+export type Item = typeof(Item.new())
+
+return Item]]></ProtectedString>
+        </Properties>
+    </Item>
+</roblox>
