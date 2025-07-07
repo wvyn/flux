@@ -1,0 +1,35 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXYVSB5198C04NUCQB0DCF5YHO8PJINR1N">
+        <Properties>
+            <string name="Name">GUID</string>
+            <string name="ScriptGuid">{b283c5ea-2ff8-4ce0-a51b-1b375a37d5d2}</string>
+            <ProtectedString name="Source"><![CDATA[local GUID = {}
+
+local tableConcat = table.concat
+local stringFormat = string.format
+local random = math.random
+
+local function randomHex(length)
+	local result = {}
+	for i = 1, length do
+		result[i] = stringFormat("%x", random(0, 15))
+	end; return tableConcat(result, "")
+end
+
+function GUID.new()
+	return stringFormat("%s-%s-4%s-%s%s-%s",
+		randomHex(8),
+		randomHex(4),
+		randomHex(3),
+		stringFormat("%x", random(8, 11)),
+		randomHex(3),
+		randomHex(12)
+	)
+end
+
+return GUID
+]]></ProtectedString>
+        </Properties>
+    </Item>
+</roblox>
