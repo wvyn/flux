@@ -1,9 +1,9 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
     <Meta name="ExplicitAutoJoints">true</Meta>
-    <Item class="ModuleScript" referent="RBX43RXA58BW5AVFOV5MSHMCF5UDFW61VC4">
+    <Item class="ModuleScript" referent="RBXYUTJ3GEYUTURBMCYL6VIDBRAIA70S8H2">
         <Properties>
             <string name="Name">ImpactCraters</string>
-            <string name="ScriptGuid">{c55f5206-6c82-4535-ac63-aea201af36b2}</string>
+            <string name="ScriptGuid">{3972ea67-a1ba-4509-8003-99c5e6eda661}</string>
             <ProtectedString name="Source"><![CDATA[local ImpactCraters = {}
 
 local MergeTable = function(...)
@@ -140,6 +140,7 @@ function ImpactCraters:ParallelCraters(
 		ChunkSize: number, --[OPTIONAL] Chunk Size. 
 		ChunkProperties: {}, --[OPTIONAL] Set properties of the chunks. Mainly used when RaycastParams is left nil.
 		ChunkFloorYMultiplier: number, --[OPTIONAL] If the chunk doesn't go down far enough you can multiply it.
+		ChunkPositionRandomness: number, --[OPTIONAL] Random chunk positions to look less in linearly.
 
 		ChunkRandomRotation: boolean, -- [OPTIONAL] Using pi it will rotate the chunk in absolute random orientations.
 		ChunkRandomOrientationFactor: number, -- [OPTIONAL] how much should it rotate in a random direction
@@ -162,6 +163,7 @@ function ImpactCraters:ParallelCraters(
 		ChunkSize = 3,
 		ChunkProperties = {},
 		ChunkFloorYMultiplier = 0,
+		ChunkPositionRandomness = 10,
 
 		ChunkRandomRotation = true,
 		ChunkRandomOrientationFactor = math.pi/10,
@@ -191,7 +193,7 @@ function ImpactCraters:ParallelCraters(
 
 		for i = 0, 1 do
 			i = i == 0 and -1 or i
-			local chunkCFrame = biChunkCenter * CFrame.new(settings.ParallelDistance * i, 0, 0)
+			local chunkCFrame = biChunkCenter * CFrame.new(settings.ParallelDistance * i + math.random() * settings.ChunkPositionRandomness, 0, 0)
 			local chunkPosition = chunkCFrame.Position
 
 			local chunkRaycast
