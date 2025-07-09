@@ -1,14 +1,31 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
     <Meta name="ExplicitAutoJoints">true</Meta>
-    <Item class="ModuleScript" referent="RBXDHVHIAN8EY7LNF4SIB1ORU7X3E6HCUZ6">
+    <Item class="ModuleScript" referent="RBX73H5YPQ5EXO5MVYN6W9W0K2M07ETA6S6">
         <Properties>
             <string name="Name">TinyChunks</string>
-            <string name="ScriptGuid">{d306239d-bf8c-4c26-97a7-723f147ee337}</string>
+            <string name="ScriptGuid">{02d33cc2-1d64-438e-821d-d04dd1d98195}</string>
             <ProtectedString name="Source"><![CDATA[local TinyChunks = {}
 
 if game:GetService("RunService"):IsServer() then
 	game:GetService("PhysicsService"):RegisterCollisionGroup("TinyChunks")
 	game:GetService("PhysicsService"):CollisionGroupSetCollidable("TinyChunks", "TinyChunks", false)
+end
+
+local MergeTable = function(...)
+	local tables = {...}
+	local newTable = {}
+	local append = false
+	for i, tab in next, tables do
+		if i == 1 and #tab > 0 and tonumber(table.pack(next(tab))[1]) then append = true end
+		for i, v in next, tab do
+			if append then
+				table.insert(newTable, v)
+			else
+				if newTable[i] then continue end
+				newTable[i] = v
+			end
+		end
+	end; return newTable
 end
 
 function TinyChunks.new()
@@ -37,7 +54,7 @@ function TinyChunks:ExplodeFromPoint(
 		RaycastParams: RaycastParams
 	}
 ) if #self.Chunks > 0 then self:Debris() end
-	settings = shared.Modules.MergeTable(settings, {
+	settings = MergeTable(settings, {
 		Chunks = 10,	
 		ChunkSize = 0.7,
 
