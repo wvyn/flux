@@ -1,0 +1,144 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXGLTP07SZW4CIBMCDXUYFP56LTTY63GZD">
+        <Properties>
+            <string name="Name">RagdollLegacy</string>
+            <string name="ScriptGuid">{260f2da2-14b9-47db-ab63-29f1062dbcf4}</string>
+            <ProtectedString name="Source"><![CDATA[local players = game:GetService("Players")
+
+local Ragdoll = {}
+local RagdollFunctions = {}
+
+function Ragdoll.new(character: Model)
+	local self = setmetatable({}, {__index = RagdollFunctions})
+	self.BodyParts = { "Torso" }
+
+	self.Character = character
+	self.Humanoid = character:FindFirstChildOfClass("Humanoid")
+
+	self.IsRagdolled = false
+	self.RagdollParts = {}
+	self.RagdollWelds = {}
+
+	return self
+end
+
+function RagdollFunctions:Toggle(boolean: boolean)
+	if self.IsRagdolled == boolean then return end
+
+	if boolean and not self.IsRagdolled then
+		self:Toggle(false)
+
+		self.IsRagdolled = true
+		if not players:GetPlayerFromCharacter(self.Character) then
+			self.Humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+		end
+
+		local rootPartWeld = Instance.new("Weld")
+		rootPartWeld.Name = "RagdollRootPart"
+		rootPartWeld.Part0 = self.Character.Torso
+		rootPartWeld.Part1 = self.Humanoid.RootPart
+		rootPartWeld.Parent = self.Humanoid.RootPart
+		table.insert(self.RagdollWelds, rootPartWeld)
+
+		self.Humanoid.RootPart.RootJoint.Enabled = false
+		self.Humanoid.PlatformStand = true
+
+		for _, bodyPartName in next, self.BodyParts do
+			local bodyPart = self.Character[bodyPartName] :: Motor6D
+			for _, motor6D: Motor6D in next, bodyPart:GetChildren() do
+				if motor6D:IsA("Motor6D") then
+					if not motor6D.Part0 or not motor6D.Part1 then continue end
+					local motorPart1 = motor6D.Part1
+
+					self.RagdollParts[motorPart1.Name] = self.RagdollParts[motorPart1.Name] or {}
+
+					local ballSocketConstraint = self.RagdollParts[motorPart1.Name].BallSocketConstraint or Instance.new("BallSocketConstraint")
+
+					local ragdollAttachment = self.RagdollParts[motorPart1.Name].RagdollAttachment or Instance.new("Attachment")
+					ragdollAttachment.Name = "RagdollAttachment"
+					ragdollAttachment.CFrame = motor6D.C0
+					ragdollAttachment.Parent = motor6D.Part0
+
+					local limbRagdollAttachment = self.RagdollParts[motorPart1.Name].LimbRagdollAttachment or Instance.new("Attachment")
+					limbRagdollAttachment.Name = "LimbRagdollAttachment"
+					limbRagdollAttachment.CFrame = motor6D.C1
+					limbRagdollAttachment.Parent = motorPart1
+
+					local defaultAngle = string.match(motorPart1.Name, "Arm") and 180 or 100
+					local returnAngle = string.match(motorPart1.Name, "Arm") and 45 or 50
+
+					ballSocketConstraint.Enabled = true
+					ballSocketConstraint.Attachment0 = ragdollAttachment
+					ballSocketConstraint.Attachment1 = limbRagdollAttachment
+					ballSocketConstraint.UpperAngle = defaultAngle
+					ballSocketConstraint.TwistLowerAngle = -defaultAngle
+					ballSocketConstraint.TwistUpperAngle = defaultAngle
+					ballSocketConstraint.LimitsEnabled = true
+					ballSocketConstraint.TwistLimitsEnabled = true
+
+					game:GetService("TweenService"):Create(ballSocketConstraint, TweenInfo.new(0.6), {
+						MaxFrictionTorque = 5,
+						UpperAngle = returnAngle,
+						TwistLowerAngle = -returnAngle,
+						TwistUpperAngle = returnAngle
+					}):Play()
+
+					local ragdollPart = self.RagdollParts[motorPart1.Name].RagdollPart or Instance.new("Part")
+					ragdollPart.Name = "RagdollPart"
+					ragdollPart.Transparency = 1
+					ragdollPart.Size = motorPart1.Size/1.5
+					ragdollPart.CollisionGroup = "Ragdoll"
+					ragdollPart.CFrame = motorPart1.CFrame
+					ragdollPart.Massless = true
+					ragdollPart.CanCollide = true
+					ragdollPart.Parent = motorPart1
+
+					local ragdollWeld = self.RagdollParts[motorPart1.Name].RagdollWeld or Instance.new("WeldConstraint")
+					ragdollWeld.Name = "RagdollWeld"
+					ragdollWeld.Part0 = motorPart1
+					ragdollWeld.Part1 = ragdollPart
+					ragdollWeld.Enabled = true
+					ragdollWeld.Parent = ragdollPart
+
+					ballSocketConstraint.Parent = motorPart1
+					motor6D.Enabled = false
+					motor6D.Part1 = nil
+
+					self.RagdollParts[motorPart1.Name].Part1 = motorPart1
+					self.RagdollParts[motorPart1.Name].Motor = motor6D
+
+					self.RagdollParts[motorPart1.Name][ballSocketConstraint.Name] = ballSocketConstraint
+
+					self.RagdollParts[motorPart1.Name][ragdollAttachment.Name] = ragdollAttachment
+					self.RagdollParts[motorPart1.Name][limbRagdollAttachment.Name] = limbRagdollAttachment
+
+					self.RagdollParts[motorPart1.Name][ragdollPart.Name] = ragdollPart
+					self.RagdollParts[motorPart1.Name][ragdollWeld.Name] = ragdollWeld
+				end
+			end
+		end
+
+		self.Humanoid.RootPart.RootJoint.Enabled = true
+	elseif self.IsRagdolled then
+		self.IsRagdolled = false
+		self.Humanoid.PlatformStand = false
+		self.Humanoid.RootPart.Massless = false
+		self.Humanoid.RootPart.RootJoint.Enabled = true
+		if not players:GetPlayerFromCharacter(self.Character) then
+			self.Humanoid:ChangeState(Enum.HumanoidStateType.Running)
+		end
+		for i, essentials in next, self.RagdollParts do
+			essentials.Motor.Part1 = essentials.Part1
+			essentials.Motor.Enabled = true
+			essentials.RagdollPart.CanCollide = false
+			essentials.RagdollWeld.Enabled = false
+		end; for _, v in next, self.RagdollWelds do v:Destroy() end
+		table.clear(self.RagdollWelds)
+	end
+end
+
+return Ragdoll]]></ProtectedString>
+        </Properties>
+    </Item>
+</roblox>
