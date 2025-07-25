@@ -1,9 +1,9 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
     <Meta name="ExplicitAutoJoints">true</Meta>
-    <Item class="ModuleScript" referent="RBX2A8ER5OJH7M3F1BVBQG1UXBOTF6I8OPY">
+    <Item class="ModuleScript" referent="RBXUX3GEDTUYO94G2UKPUQFMCQDLLBTUQ99">
         <Properties>
             <string name="Name">InstanceEncoding</string>
-            <string name="ScriptGuid">{b1cfbb4d-372a-432f-84dc-f0ffcab99133}</string>
+            <string name="ScriptGuid">{9cc73e51-d57d-40b3-8c10-d3219830e543}</string>
             <ProtectedString name="Source"><![CDATA[local assetService = game:GetService("AssetService")
 
 local Signal = require("./Signal")
