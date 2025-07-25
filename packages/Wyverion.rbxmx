@@ -1,9 +1,9 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
     <Meta name="ExplicitAutoJoints">true</Meta>
-    <Item class="ModuleScript" referent="RBX0NGZCDCVXHVIRAAYPAILRSQTTUWFWZM8">
+    <Item class="ModuleScript" referent="RBX0SZSE8GWUP5Y7XMAUD79F4IEUHMH4GIJ">
         <Properties>
             <string name="Name">Wyverion</string>
-            <string name="ScriptGuid">{1b2945b7-1886-413e-8d22-e80fcf180719}</string>
+            <string name="ScriptGuid">{052c38df-b1cf-4ae1-84b3-a487521764ff}</string>
             <ProtectedString name="Source"><![CDATA[--[[
 Wyverion 1.2.4
 
@@ -49,10 +49,10 @@ Acquire a Service from <strong>Wyverion</strong>
 
 return Wyverion]]></ProtectedString>
         </Properties>
-        <Item class="ModuleScript" referent="RBX3GTR5HJOQC7US7ZY1LQ4CCL3QJNCMQCB">
+        <Item class="ModuleScript" referent="RBXMFTGBKUNXOW9V7KSB4OM6N6V56VYORHB">
             <Properties>
                 <string name="Name">Discord</string>
-                <string name="ScriptGuid">{a2e8c417-a597-44d0-86f0-2935545f0233}</string>
+                <string name="ScriptGuid">{87760072-62a0-4fc0-98e1-bad3ae89273c}</string>
                 <ProtectedString name="Source"><![CDATA[--[[
 Wyverion Discord 0.7.2
 
@@ -599,10 +599,10 @@ end :: typeof(types.methods.discord.new)
 
 return Discord]]></ProtectedString>
             </Properties>
-            <Item class="ModuleScript" referent="RBX74KNHV258WG7SA8XB5AXEV0JY3404LKI">
+            <Item class="ModuleScript" referent="RBXJT0GGZLXICCC03G6C91O62SG1FUP55AT">
                 <Properties>
                     <string name="Name">types.d</string>
-                    <string name="ScriptGuid">{babf6ab4-2336-4e10-a23c-221d9d0f5fe0}</string>
+                    <string name="ScriptGuid">{fc55bf5b-a87f-4250-9cdd-f24a927f296b}</string>
                     <ProtectedString name="Source"><![CDATA[local GatewayIntentBits = require("./GatewayIntentBits")
 export type DiscordInstance = "Client"
 
@@ -933,10 +933,10 @@ export type Embed = {
 return { methods = methods }]]></ProtectedString>
                 </Properties>
             </Item>
-            <Item class="ModuleScript" referent="RBX3PFAREIYHOWB59L0VARVE7FXOTD13ZIP">
+            <Item class="ModuleScript" referent="RBX215LWGOWI0XX70Y6537ZQD99IOXI86H9">
                 <Properties>
                     <string name="Name">GatewayIntentBits</string>
-                    <string name="ScriptGuid">{6b16dc4f-04c2-4963-8847-1999ccc95189}</string>
+                    <string name="ScriptGuid">{0d94af2b-747a-4c45-b895-11d95d631c4a}</string>
                     <ProtectedString name="Source"><![CDATA[return {
 	Guilds = 1,
 	GuildMembers = 2,
@@ -964,10 +964,10 @@ return { methods = methods }]]></ProtectedString>
                 </Properties>
             </Item>
         </Item>
-        <Item class="ModuleScript" referent="RBXQCGTPQEHI24B43PTSVV4DSEKPU5K4UWC">
+        <Item class="ModuleScript" referent="RBXH3R6CNVOKXAUEGGYOVW8PS5CCSNBJY0N">
             <Properties>
                 <string name="Name">JSONCloud</string>
-                <string name="ScriptGuid">{4be0be22-1272-4e43-974d-7e8a85551950}</string>
+                <string name="ScriptGuid">{7cacdfc8-201d-40a1-9de8-9b8e7392c48f}</string>
                 <ProtectedString name="Source"><![CDATA[--[[
 JSON Cloud 1.0.0
 
@@ -1128,10 +1128,10 @@ end :: types.JSONCloudNew
 
 return JSONCloud]]></ProtectedString>
             </Properties>
-            <Item class="ModuleScript" referent="RBXOV88QU7QXEFK336GP5NZF40H4XAIEGH8">
+            <Item class="ModuleScript" referent="RBXVJE4G6H0N6U7SU8T67P0ELSH1SRXHFGX">
                 <Properties>
                     <string name="Name">types.d</string>
-                    <string name="ScriptGuid">{12484bb9-8e3c-47af-a1d4-303a7045e035}</string>
+                    <string name="ScriptGuid">{01ece638-49b6-42aa-b964-f1f80b868bb9}</string>
                     <ProtectedString name="Source"><![CDATA[local methods = {
 	json = {
 		--[[
@@ -1224,10 +1224,10 @@ return {}]]></ProtectedString>
                 </Properties>
             </Item>
         </Item>
-        <Item class="ModuleScript" referent="RBXRQ1GLBUHEAGCNYE2H8W10KI1LFG1B6X8">
+        <Item class="ModuleScript" referent="RBXDQ9UPD13UM9PBD4EDN8YPH9JWJ4YFN3Y">
             <Properties>
                 <string name="Name">Google</string>
-                <string name="ScriptGuid">{c32991b1-b86f-4913-8f2f-11854ff0d8c5}</string>
+                <string name="ScriptGuid">{a76d7c79-aaa4-4741-a0d2-ccad42b087b4}</string>
                 <ProtectedString name="Source"><![CDATA[--[[
 Wyverion 1.0.1
 
@@ -1247,10 +1247,10 @@ Google.Services = {
 
 return Google]]></ProtectedString>
             </Properties>
-            <Item class="ModuleScript" referent="RBXZP8VDELWVN4OKDPBNMVKK9DKI333IKZC">
+            <Item class="ModuleScript" referent="RBXEUZIMJMOKF8LB4O9GQA8XCHIUBXZBP7B">
                 <Properties>
                     <string name="Name">types.d</string>
-                    <string name="ScriptGuid">{39fd54d3-dac5-4e52-96d5-61d01249c595}</string>
+                    <string name="ScriptGuid">{3cf1dcc5-c311-4f09-904b-6d251b3074db}</string>
                     <ProtectedString name="Source"><![CDATA[export type GoogleType = "Spreadsheets"
 
 local methods = {
@@ -1291,10 +1291,10 @@ export type SpreadSheet = {
 return { methods = methods }]]></ProtectedString>
                 </Properties>
             </Item>
-            <Item class="ModuleScript" referent="RBXNVC7YGKCIQZ96B5OKH1W1KLOE3ZS12A4">
+            <Item class="ModuleScript" referent="RBX0NABGT9P3BI7M9I73I6OBR61I2LNT38Q">
                 <Properties>
                     <string name="Name">SpreadSheets</string>
-                    <string name="ScriptGuid">{1f1f52bc-fdc4-421f-a3e3-30073bf25689}</string>
+                    <string name="ScriptGuid">{c5477d32-a659-4682-8c08-4665be676b98}</string>
                     <ProtectedString name="Source"><![CDATA[--[[
 Wyverion 1.0.1
 
@@ -1363,10 +1363,10 @@ return SpreadSheets
                 </Properties>
             </Item>
         </Item>
-        <Item class="ModuleScript" referent="RBXN92FQHUE7RX720C1JRNC462MYX3FYA2C">
+        <Item class="ModuleScript" referent="RBXID9SRM44BJZY04V0ANNUSQSYAX1SKA4U">
             <Properties>
                 <string name="Name">Servers</string>
-                <string name="ScriptGuid">{98e2b73e-da08-42a7-a1f7-e6497c44113b}</string>
+                <string name="ScriptGuid">{36bfbe5e-7f48-46e9-b3e7-d6ddee03d04d}</string>
                 <ProtectedString name="Source"><![CDATA[--[[
 Wyverion Servers 0.10.4.72
 
@@ -1461,10 +1461,10 @@ end
 
 return Servers]]></ProtectedString>
             </Properties>
-            <Item class="ModuleScript" referent="RBXMVJ12LUOT01BZZ6D2TZSOKF7WOHY35A9">
+            <Item class="ModuleScript" referent="RBXHHH1B1F5MGUUJSBK1H48FQ5MZ16J10EJ">
                 <Properties>
                     <string name="Name">servers.d</string>
-                    <string name="ScriptGuid">{62247c1b-c9c4-40b8-b849-95cecaf9fade}</string>
+                    <string name="ScriptGuid">{7515d4f0-a185-4094-a158-e078015cfa08}</string>
                     <ProtectedString name="Source"><![CDATA[local serverTypes = require("./Server/server.d")
 local listTypes = require("./ServerList/list.d")
 
@@ -1537,10 +1537,10 @@ export type Servers = {
 return { constructors = constructors }]]></ProtectedString>
                 </Properties>
             </Item>
-            <Item class="ModuleScript" referent="RBX8O4063CW732T0ILT16CECV85SZERYPQC">
+            <Item class="ModuleScript" referent="RBXFRCSME8SVG0YZSV1T55DV019XC6EK6FJ">
                 <Properties>
                     <string name="Name">Server</string>
-                    <string name="ScriptGuid">{3284dcd3-2c87-4db5-b3aa-260f53047daa}</string>
+                    <string name="ScriptGuid">{62e26e83-a4d7-4e60-8c8a-7ec961dd2651}</string>
                     <ProtectedString name="Source"><![CDATA[--[[
 Wyverion Servers.Server 0.5.1.1
 
@@ -1783,10 +1783,10 @@ end
 
 return Server]]></ProtectedString>
                 </Properties>
-                <Item class="ModuleScript" referent="RBXUTNG7GPJPUALGF2UN3RMWW7NGVMGWCE6">
+                <Item class="ModuleScript" referent="RBXC4BRCMIFJF32HXYMFCXC6XYHE9VNH278">
                     <Properties>
                         <string name="Name">server.d</string>
-                        <string name="ScriptGuid">{db06bbe9-eaad-4b15-b630-b074636a58d6}</string>
+                        <string name="ScriptGuid">{db5cde92-5317-411e-b2d6-1baa71538253}</string>
                         <ProtectedString name="Source"><![CDATA[local Signal = require("../../dependancies/Signal")
 
 local methods = {
@@ -1918,10 +1918,10 @@ return {}]]></ProtectedString>
                     </Properties>
                 </Item>
             </Item>
-            <Item class="ModuleScript" referent="RBXRCFWAU1OAP8S04MXNSVHVB3A2D4YVAC0">
+            <Item class="ModuleScript" referent="RBXYQKR5MF4J8XO1IQW782RNSHFHHE227JC">
                 <Properties>
                     <string name="Name">ServerList</string>
-                    <string name="ScriptGuid">{c38eb875-91dd-4855-9651-e6bc50bf473e}</string>
+                    <string name="ScriptGuid">{4abcc7b4-7fa8-4c97-9968-6a32d8c4783a}</string>
                     <ProtectedString name="Source"><![CDATA[local types = require("./ServerList/list.d")
 local serversTypes = require("./servers.d")
 local serverTypes = require("./Server/server.d")
@@ -2028,10 +2028,10 @@ end :: typeof(types.constructors.new)
 
 return ServerList]]></ProtectedString>
                 </Properties>
-                <Item class="ModuleScript" referent="RBXXHK2L4MBJ41H4129KYPVQGHKFQVWSD3M">
+                <Item class="ModuleScript" referent="RBXGSPJ6NZ15VXHOIB9WGAGBZ0HMFZYMYYV">
                     <Properties>
                         <string name="Name">list.d</string>
-                        <string name="ScriptGuid">{cd589b7f-1106-4e3a-89ec-7cc090ec2f7c}</string>
+                        <string name="ScriptGuid">{eeb9c5f5-96fb-4cd2-8dcb-cd0b132ed0e0}</string>
                         <ProtectedString name="Source"><![CDATA[local serverTypes = require("../Server/server.d")
 
 local constructors = {
@@ -2063,10 +2063,10 @@ return { constructors = constructors }]]></ProtectedString>
                     </Properties>
                 </Item>
             </Item>
-            <Item class="ModuleScript" referent="RBXA6R3PSJVUM0NQERF3GSCYEL7ECNU1IQG">
+            <Item class="ModuleScript" referent="RBX6H9SHIZGLMB9FDS2ITF6C4A39FI173Q0">
                 <Properties>
                     <string name="Name">Plugins</string>
-                    <string name="ScriptGuid">{28fb5c2f-278f-497d-8f2c-2c8f9c487986}</string>
+                    <string name="ScriptGuid">{c1375459-f317-4edb-9c05-0d9d81b15af7}</string>
                     <ProtectedString name="Source"><![CDATA[--[[
 Plugins made from other Developers and can be imported to Wyverion Servers.
 This can be used to make the code shorter, easier or add new features.
@@ -2085,10 +2085,10 @@ return {
 	ServerRouter = require("./Plugins/ServerRouter")
 }]]></ProtectedString>
                 </Properties>
-                <Item class="ModuleScript" referent="RBXX08IY9WSQEHU3IJRAXI46ZC3MI5SPVV0">
+                <Item class="ModuleScript" referent="RBX74H3L08FMNNAQBSK9OAJIHDQQ9KDPHQK">
                     <Properties>
                         <string name="Name">WTSC</string>
-                        <string name="ScriptGuid">{5a815c34-a27b-4d68-983b-102316f9c384}</string>
+                        <string name="ScriptGuid">{3f5fd841-4eb3-4e78-a3ff-9d5c2e7b6fda}</string>
                         <ProtectedString name="Source"><![CDATA[--[[
 WTSC (What's the Server Code?) 0.2.8
 
@@ -2147,20 +2147,20 @@ end
 
 return WTSC]]></ProtectedString>
                     </Properties>
-                    <Item class="ModuleScript" referent="RBXRLQT1SGAX4LE6ZB8BBHN59D2LQYVF4KU">
+                    <Item class="ModuleScript" referent="RBX3B6QGYULY851LPIPML2IT8U2SOB5TH4M">
                         <Properties>
                             <string name="Name">WTSC.config</string>
-                            <string name="ScriptGuid">{8c6496ce-bca0-41b8-bfdb-af74569c82e9}</string>
+                            <string name="ScriptGuid">{70cccfcd-0313-478f-b4ea-9cbf5261bc4c}</string>
                             <ProtectedString name="Source"><![CDATA[return {
 	serverCodeExpiration = 10 * 60^2 -- expiration for server code
 }]]></ProtectedString>
                         </Properties>
                     </Item>
                 </Item>
-                <Item class="ModuleScript" referent="RBXZWV5WLDBM6048E6R36OMOMGS8ND9VGLZ">
+                <Item class="ModuleScript" referent="RBXXZME2OZWTR6ATI4FVXO11RX3IBDEY0L9">
                     <Properties>
                         <string name="Name">ServerRouter</string>
-                        <string name="ScriptGuid">{2aebdb09-10fe-46ad-ac3a-368f837e2ebc}</string>
+                        <string name="ScriptGuid">{d0402a26-8005-45b0-a74c-24bd2820dafd}</string>
                         <ProtectedString name="Source"><![CDATA[--[[
 Server Router 0.6.1
 
@@ -2209,27 +2209,27 @@ function ServerRouter:Run()
 	if ServerRouter._run then return end
 	ServerRouter._run = true
 	while ServerRouter._run do
-		ServerRouter:Refresh()
+		task.spawn(ServerRouter.Refresh, ServerRouter)
 		task.wait(config.updateInterval.Min + (config.updateInterval.Max - config.updateInterval.Min) * math.random())
 	end; ServerRouter._run = false
 end
 
 return ServerRouter]]></ProtectedString>
                     </Properties>
-                    <Item class="ModuleScript" referent="RBXCNBO09E354E6ZA67ARHVM3LGNC64JSPF">
+                    <Item class="ModuleScript" referent="RBXZA1RW4YSA8S00NUKX1N0E9PHSBVS6E9K">
                         <Properties>
                             <string name="Name">runtime.config</string>
-                            <string name="ScriptGuid">{7bd3a7bc-c28f-45b7-bd7a-dc5efe9e94e2}</string>
+                            <string name="ScriptGuid">{c8382999-0035-42d9-945d-40ba8595bb64}</string>
                             <ProtectedString name="Source"><![CDATA[return {
 	updateInterval = NumberRange.new(5, 10) --NumberRange.new(60, 75)
 }]]></ProtectedString>
                         </Properties>
                     </Item>
                 </Item>
-                <Item class="ModuleScript" referent="RBX16ZD35PAAXPORBAXJXFTYMGXZSLX6OHY">
+                <Item class="ModuleScript" referent="RBXMY9EHPA8QJ7RPVKS2IYI0IC4KEVRZOCV">
                     <Properties>
                         <string name="Name">ServerCapper</string>
-                        <string name="ScriptGuid">{80340066-08f0-4e1c-8216-11312b6cfbe8}</string>
+                        <string name="ScriptGuid">{4e5406af-7636-4c82-8bf4-d02a005d7526}</string>
                         <ProtectedString name="Source"><![CDATA[--[[
 Server Capper 0.1.0
 
@@ -2382,10 +2382,10 @@ end
 
 return ServerCapper]]></ProtectedString>
                     </Properties>
-                    <Item class="ModuleScript" referent="RBXABT4T2B6XVXYHHD50MQ3N5TUNLAKE7DD">
+                    <Item class="ModuleScript" referent="RBXYEB7QMFA8OSZ04OUBZVKJU3FT9LIB9UC">
                         <Properties>
                             <string name="Name">request.config</string>
-                            <string name="ScriptGuid">{556b2ca8-7bfc-47cf-8021-7ed8fc79a07b}</string>
+                            <string name="ScriptGuid">{e0420f34-5321-4498-82b4-6852bd6b50d9}</string>
                             <ProtectedString name="Source"><![CDATA[return {
 	maxPlayers = game:GetService("Players").MaxPlayers - 4, -- server cap
 	
@@ -2395,10 +2395,10 @@ return ServerCapper]]></ProtectedString>
                         </Properties>
                     </Item>
                 </Item>
-                <Item class="ModuleScript" referent="RBXMXQU7GE5OWNF91F6KA38AZ8F5EKB9IUP">
+                <Item class="ModuleScript" referent="RBXAMJQIXVN3OH2I2CGD85Y87WUPZ8CW70J">
                     <Properties>
                         <string name="Name">JSONable</string>
-                        <string name="ScriptGuid">{60d40d52-e805-48d6-adc6-ba3ae0dbe72e}</string>
+                        <string name="ScriptGuid">{b36ebf98-d2e7-43a0-a4ea-02ca7c54fe47}</string>
                         <ProtectedString name="Source"><![CDATA[local serversTypes = require("../servers.d")
 
 local JSONable = {}
@@ -2423,10 +2423,10 @@ end
 return JSONable]]></ProtectedString>
                     </Properties>
                 </Item>
-                <Item class="ModuleScript" referent="RBXBK0STMS2C39W2ZIA65XR8IW8M492Z60N">
+                <Item class="ModuleScript" referent="RBXXKP69PP1M7CE053NIHUILRGGFPHV1CZR">
                     <Properties>
                         <string name="Name">GlobalMessages</string>
-                        <string name="ScriptGuid">{ed252ec6-1063-42cb-b64e-84f9b8946418}</string>
+                        <string name="ScriptGuid">{1e2aa31f-9509-4c3b-96bc-5ab8a6b9215c}</string>
                         <ProtectedString name="Source"><![CDATA[local messagingService = game:GetService("MessagingService")
 
 local Signal = require("../../dependancies/Signal")
@@ -2515,10 +2515,10 @@ return GlobalMessages]]></ProtectedString>
                     </Properties>
                 </Item>
             </Item>
-            <Item class="ModuleScript" referent="RBX6U7UTK5SHCB2SDLKIFVXE1HQVC7L0ZI2">
+            <Item class="ModuleScript" referent="RBXMR3A6NUF0KGCYJ56SJLM10CV5466HR8C">
                 <Properties>
                     <string name="Name">server.config</string>
-                    <string name="ScriptGuid">{804d2503-4e56-4290-a35e-5a47244fe972}</string>
+                    <string name="ScriptGuid">{508c34d1-dd3a-41af-85d2-c20cfc63329e}</string>
                     <ProtectedString name="Source"><![CDATA[-- [Wyverion Servers Configurations] --
 
 local config = {
@@ -2545,14 +2545,14 @@ return config]]></ProtectedString>
                 </Properties>
             </Item>
         </Item>
-        <Item class="Folder" referent="RBXGAKI2WAA2DZ3JGTG859RL4RIV6HT0UGH">
+        <Item class="Folder" referent="RBXIPHMKROAPNC25SQWQ7CVTGAZRBNJT4NR">
             <Properties>
                 <string name="Name">dependancies</string>
             </Properties>
-            <Item class="ModuleScript" referent="RBXDVBKLSD5A6LUKH3YPNUYZGMLJDXMU219">
+            <Item class="ModuleScript" referent="RBXNLH7DN7H3ZRCJXF66FWADCC4CIJSB479">
                 <Properties>
                     <string name="Name">Signal</string>
-                    <string name="ScriptGuid">{ae4321ba-f91a-4ec2-9b8d-f8adf289d50f}</string>
+                    <string name="ScriptGuid">{70fc53a8-92e4-4a43-9820-c96a13f72162}</string>
                     <ProtectedString name="Source"><![CDATA[local SignalConstructor = {}
 local SignalMethods = {}
 
