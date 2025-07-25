@@ -1,9 +1,9 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
     <Meta name="ExplicitAutoJoints">true</Meta>
-    <Item class="ModuleScript" referent="RBXNY2PFIZT3WOQFD217AIBD1HKHGF24826">
+    <Item class="ModuleScript" referent="RBXJQCJNY980TJE31B5ITNISJ9TUBGNWWO0">
         <Properties>
             <string name="Name">Backpack</string>
-            <string name="ScriptGuid">{a8d79717-7bcd-4be0-b00d-7ddd4c9194a7}</string>
+            <string name="ScriptGuid">{c9fa5886-9d95-488e-a1ce-00a866d4f19b}</string>
             <ProtectedString name="Source"><![CDATA[local Item = require("./Item")
 local Signal = require("./Signal")
 
