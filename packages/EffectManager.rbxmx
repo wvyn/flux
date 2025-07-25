@@ -1,9 +1,9 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
     <Meta name="ExplicitAutoJoints">true</Meta>
-    <Item class="ModuleScript" referent="RBXIGZEXHDNE0JBWM9RZKI63EK1UJHP7EJH">
+    <Item class="ModuleScript" referent="RBXSKTNGZ5CHKWZYWUNG3W2QT5XGGPMX4UH">
         <Properties>
             <string name="Name">EffectManager</string>
-            <string name="ScriptGuid">{d8c1bf9a-03cd-4f3b-b868-c39d955d0744}</string>
+            <string name="ScriptGuid">{0e58250e-3bcc-41f3-8cb1-d63308344ac8}</string>
             <ProtectedString name="Source"><![CDATA[local runService = game:GetService("RunService")
 
 local isServer = runService:IsServer()
@@ -110,10 +110,10 @@ end
 
 return EffectManager]]></ProtectedString>
         </Properties>
-        <Item class="ModuleScript" referent="RBX38ON06BOBADTB9IWBAX0IK96C2NGLZNQ">
+        <Item class="ModuleScript" referent="RBXSEAKRZ1R2VJ3MRCN12BC7TMCQMOFZU7V">
             <Properties>
                 <string name="Name">Effect</string>
-                <string name="ScriptGuid">{b7a36b52-a008-4e3f-a4ef-a63ee66f200d}</string>
+                <string name="ScriptGuid">{16b9c56b-048d-468d-a1b4-0ff9741a55b2}</string>
                 <ProtectedString name="Source"><![CDATA[local Effect = {}
 
 function Effect.new(name: string, value: any, identifier: string?)
@@ -125,7 +125,7 @@ export type Effect = typeof(Effect.new())
 return Effect]]></ProtectedString>
             </Properties>
         </Item>
-        <Item class="RemoteEvent" referent="RBX6GQQ6B05OPJ2Z59467C8XNQQ8OZH42RJ">
+        <Item class="RemoteEvent" referent="RBXP28WPCKG6C0WT4FPVNBHYPNJAC373PT5">
             <Properties>
                 <string name="Name">ReplicateEffect</string>
             </Properties>
