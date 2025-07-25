@@ -1,9 +1,9 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
     <Meta name="ExplicitAutoJoints">true</Meta>
-    <Item class="ModuleScript" referent="RBX9SVQBNZJBS7IDZBN0UQTHENUH7B67I4O">
+    <Item class="ModuleScript" referent="RBXYLV3PAK8REJWPUBPBNLLX6V4BMCUP1CN">
         <Properties>
             <string name="Name">WyrmType</string>
-            <string name="ScriptGuid">{f1a3ee9f-8636-416d-bda0-196310dc7585}</string>
+            <string name="ScriptGuid">{26ddc96c-597c-490b-9a55-058b319878b9}</string>
             <ProtectedString name="Source"><![CDATA[--!strict
 
 local WyrmType = {}
