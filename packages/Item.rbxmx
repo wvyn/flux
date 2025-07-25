@@ -1,9 +1,9 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
     <Meta name="ExplicitAutoJoints">true</Meta>
-    <Item class="ModuleScript" referent="RBXOJYLHFZYBWU0WLQKZ20T003XQBOAET0S">
+    <Item class="ModuleScript" referent="RBXW3YKUEBM54QFHK8RSJTCVI8YNQZ1JZS6">
         <Properties>
             <string name="Name">Item</string>
-            <string name="ScriptGuid">{8ccde02d-ca2f-4278-af53-35d50a196e89}</string>
+            <string name="ScriptGuid">{b4fa777e-696d-4651-b898-b7a1c3d127b3}</string>
             <ProtectedString name="Source"><![CDATA[local serverStorage = game:GetService("ServerStorage")
 
 local GUID = require("./GUID")
