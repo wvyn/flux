@@ -1,0 +1,76 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBX2NGX95X5QPN0JFMCA3ZOLZ8PBRUXBWDF">
+        <Properties>
+            <string name="Name">Appearance</string>
+            <string name="ScriptGuid">{072aab35-6465-43ad-a140-043c59667d79}</string>
+            <ProtectedString name="Source"><![CDATA[local serverStorage = game:GetService("ServerStorage")
+
+local WyrmType = require("./WyrmType")
+local Welder = require("./Welder")
+
+local Appearance = {}
+local AppearanceMethods = {}
+
+function Appearance.new(character: Model)
+	local appearanceFolder = Instance.new("Folder")
+	appearanceFolder.Name = "Appearance"
+	appearanceFolder.Parent = character
+
+	local appearance = setmetatable({
+		Character = character,
+		
+		AppearanceFolder = appearanceFolder
+	}, { __index = AppearanceMethods })
+	return appearance
+end
+
+export type ArmorName = WyrmType.getChildren<typeof(serverStorage.Armor)>
+export type AccessoryName = WyrmType.getChildren<typeof(serverStorage.Accessories)>
+
+local function equipAccessory(self: Appearance, accessoryName: ArmorName | AccessoryName | Folder)
+	local armorFolder: Folder
+	if typeof(accessoryName) == "Instance" and accessoryName:IsA("Folder") then
+		armorFolder = accessoryName
+	elseif typeof(accessoryName) == "string" then
+		armorFolder = serverStorage.Armor:FindFirstChild(accessoryName) or serverStorage.Accessories:FindFirstChild(accessoryName)
+	end
+	
+	if armorFolder then
+		local character = self.Character
+		
+		for _, armorPart: Model in next, armorFolder:GetChildren() do
+			if armorPart:IsA("Model") and character:FindFirstChild(armorPart.Name) then
+				local clonedArmorPart = armorPart:Clone()
+				
+				local weldResult = Welder.weldModel(clonedArmorPart, {
+					Root = clonedArmorPart.PrimaryPart or clonedArmorPart:FindFirstChild("Middle"),
+					Anchored = false,
+					Massless = true,
+					CanCollide = false
+				})
+				
+				local bodyWeld = Instance.new("Weld")
+				bodyWeld.Name = "BodyWeld"
+				bodyWeld.Part0 = character[clonedArmorPart.Name]
+				bodyWeld.Part1 = weldResult.Root
+				bodyWeld.Parent = bodyWeld.Part1
+				
+				weldResult.Root.Transparency = 1
+				clonedArmorPart.Parent = self.AppearanceFolder
+			elseif armorPart:IsA("Clothing") then
+				armorPart:Clone().Parent = character
+			end
+		end
+	end
+end
+
+AppearanceMethods.EquipAccessory = equipAccessory :: (self: Appearance, accessoryName: AccessoryName) -> typeof(equipAccessory())
+AppearanceMethods.EquipArmor = equipAccessory :: (self: Appearance, armorName: ArmorName) -> typeof(equipAccessory())
+
+export type Appearance = typeof(Appearance.new())
+
+return Appearance]]></ProtectedString>
+        </Properties>
+    </Item>
+</roblox>
