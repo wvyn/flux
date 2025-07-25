@@ -1,9 +1,9 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
     <Meta name="ExplicitAutoJoints">true</Meta>
-    <Item class="ModuleScript" referent="RBXYVSB5198C04NUCQB0DCF5YHO8PJINR1N">
+    <Item class="ModuleScript" referent="RBXK43K7BHX2D1NRHNFY3ADSHG861ENG2O6">
         <Properties>
             <string name="Name">GUID</string>
-            <string name="ScriptGuid">{b283c5ea-2ff8-4ce0-a51b-1b375a37d5d2}</string>
+            <string name="ScriptGuid">{238a8ee1-168e-4795-9431-f82da9aac291}</string>
             <ProtectedString name="Source"><![CDATA[local GUID = {}
 
 local tableConcat = table.concat
