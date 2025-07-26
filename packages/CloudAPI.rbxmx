@@ -1,0 +1,181 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+    <Meta name="ExplicitAutoJoints">true</Meta>
+    <Item class="ModuleScript" referent="RBXRH59N9ZL0ALI14J6YP8LJTWSTO26LZ4T">
+        <Properties>
+            <string name="Name">CloudAPI</string>
+            <string name="ScriptGuid">{fc58b946-e209-4b22-9f38-35fc8f2913b5}</string>
+            <ProtectedString name="Source"><![CDATA[local http = require("./http")
+local CloudTypes = require("@self/CloudTypes")
+
+local CloudAPI = {}
+local CloudMethods = {}
+
+local GroupMethods = {}
+local UniverseMethods = {}
+
+function CloudAPI.new(
+	options: {
+		APIKey: Secret,
+		Host: string?
+	}
+)
+	assert(options.APIKey, `[CloudAPI.new] APIKey is required.`)
+	assert(typeof(options.APIKey) == "Secret", `[CloudAPI.new] APIKey expected as a Secret got {typeof(options.APIKey)}`)
+
+	local CloudInterface = setmetatable({
+		APIKey = options.APIKey,
+		Host = options.Host or "https://apis.roblox.com"
+	}, { __index = CloudMethods })
+
+	CloudInterface.Universes = setmetatable({ _interface = CloudInterface }, { __index = UniverseMethods })
+	CloudInterface.Groups = setmetatable({ _interface = CloudInterface }, { __index = GroupMethods })
+
+	return CloudInterface
+end
+
+local function createRequest<K, V>(self: CloudInterface, path: string, method: http.Method, body: string | { [K]: V })
+	return http:Request({
+		url = `{self.Host}{path}`,
+		method = method,
+		headers = {
+			["Content-Type"] = "application/json",
+			["x-api-key"] = self.APIKey,
+		},
+		body = body and (typeof(body) == "string" and body or http.JSON:Encode(body)) or nil
+	})
+end
+
+
+-- Gets the specified group.
+function GroupMethods.GetGroup(self: CloudDepth, groupId: number): Group
+	return http.JSON:Decode(createRequest(self._interface, `/cloud/v2/groups/{groupId}`, "GET").Body)
+end
+
+--[[
+Gets the Group's audit log.
+
+<strong><code>Scopes</code></strong>: <code>legacy-group:manage</code>
+]]
+function GroupMethods.GetAuditLog(self: CloudDepth, groupId: number, actionType: GroupAuditLogActionType, userId: number?, limit: number?, cursor: string?, sortOrder: ("Asc" | "Desc")?): Group
+	return http.JSON:Decode(createRequest(self._interface, `/v1/groups/{groupId}/audit-log`, "GET").Body)
+end
+
+--Gets the specified universe.
+function UniverseMethods.GetUniverse(self: CloudDepth, universeId: number): Universe
+	return http.JSON:Decode(createRequest(self._interface, `/cloud/v2/universes/{universeId}`, "GET").Body)
+end
+
+--[[
+Restarts all active servers for a specific universe if and only if a new version of the experience has been published.
+Used for releasing experience updates.
+
+<strong><code>Scopes</code></strong>: <code>universe:write</code>
+]]
+function UniverseMethods.RestartServers(self: CloudDepth, universeId: number)
+	return http.JSON:Decode(createRequest(self._interface, `/cloud/v2/universes/{universeId}:restartServers`, "POST", "{}").Body)
+end
+
+-- Gets the specified place.
+function UniverseMethods.GetPlace(self: CloudDepth, universeId: number, placeId: number): Place
+	return http.JSON:Decode(createRequest(self._interface, `/cloud/v2/universes/{universeId}/places/{placeId}`, "GET").Body)
+end
+
+--[[
+Publish a new place or update an existing place with a new version. Provide a RBXL or RBXLX file in the data-binary.
+
+<strong><code>versionType</code></strong> can only be either:
+<em><code>Saved</code></em>: the place file should be saved, but not published.
+<em><code>Published</code></em>: the place file should be saved and published.
+
+<strong><code>Scopes</code></strong>: <code>universe-places:write</code>
+]]
+function UniverseMethods.PublishPlace(self: CloudDepth, universeId: number, placeId: number, versionType: "Saved" | "Published"): { versionNumber: number }
+	return http.JSON:Decode(createRequest(self._interface, `/v1/{universeId}/places/{placeId}/versions?versionType={versionType or "Saved"}`, "POST", "{}").Body)
+end
+
+--[[
+Publishes a message to the universe's live servers.
+
+<strong><code>Scopes</code></strong>: <code>universe-messaging-service:publish</code>
+]]
+function UniverseMethods.PublishMessage(self: CloudDepth, universeId: number, topic: string, message: string): ()
+	return http.JSON:Decode(createRequest(self._interface, `/cloud/v2/universes/{universeId}:publishMessage`, "POST", { topic = topic, message = message }).Body)
+end
+
+export type GroupAuditLogActionType = 
+	| "DeletePost" | "RemoveMember" | "AcceptJoinRequest" | "DeclineJoinRequest" | "PostStatus"
+| "ChangeRank" | "BuyAd" | "SendAllyRequest" | "CreateEnemy" | "AcceptAllyRequest"
+| "DeclineAllyRequest" | "DeleteAlly" | "DeleteEnemy" | "AddGroupPlace" | "RemoveGroupPlace"
+| "CreateItems" | "ConfigureItems" | "SpendGroupFunds" | "ChangeOwner" | "Delete"
+| "AdjustCurrencyAmounts" | "Abandon" | "Claim" | "Rename" | "ChangeDescription"
+| "InviteToClan" | "KickFromClan" | "CancelClanInvite" | "BuyClan" | "CreateGroupAsset"
+| "UpdateGroupAsset" | "ConfigureGroupAsset" | "RevertGroupAsset" | "CreateGroupDeveloperProduct" | "ConfigureGroupGame"
+| "CreateGroupDeveloperSubscriptionProduct" | "Lock" | "Unlock" | "CreateGamePass" | "CreateBadge"
+| "ConfigureBadge"
+
+export type Group = {
+	path: string,
+	createTime: string,
+	updateTime: string,
+	id: string,
+	displayName: string,
+	description: string,
+	owner: string,
+	memberCount: number,
+	publicEntryAllowed: boolean,
+	locked: boolean,
+	verified: boolean
+}
+
+export type Universe = CloudTypes.Universe
+export type Place = CloudTypes.Place
+
+export type CloudDepth = { _interface: CloudInterface }
+export type CloudInterface = typeof(CloudAPI.new())
+
+return CloudAPI]]></ProtectedString>
+        </Properties>
+        <Item class="ModuleScript" referent="RBXDACCQTWSTMPRQODZSS2Y5WZ6YT46MYCB">
+            <Properties>
+                <string name="Name">CloudTypes</string>
+                <string name="ScriptGuid">{6d0f21ca-e00e-461a-939f-4f05ca79d8b1}</string>
+                <ProtectedString name="Source"><![CDATA[export type SocialLink = { title: string, uri: string }
+
+export type Place = {
+	path: string,
+	createTime: string,
+	updateTime: string,
+	displayName: string,
+	description: string,
+	serverSize: number
+}
+
+export type Universe = {
+	path: string,
+	createTime: string,
+	updateTime: string,
+	displayName: string,
+	description: string,
+	user: string,
+	group: string,
+	visiblity: string,
+	ageRating: string,
+	facebookSocialLink: SocialLink,
+	youtubeSocialLink: SocialLink,
+	twitchSocialLink: SocialLink,
+	discordSocialLink: SocialLink,
+	robloxGroupSocialLink: SocialLink,
+	guildedSocialLink: SocialLink,
+	privateServerPriceRobux: number,
+	voiceChatEnabled: boolean,
+	desktopEnabled: boolean,
+	mobileEnabled: boolean,
+	tabletEnabled: boolean,
+	vrEnabled: boolean
+}
+
+return {}]]></ProtectedString>
+            </Properties>
+        </Item>
+    </Item>
+</roblox>
