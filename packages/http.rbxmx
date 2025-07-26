@@ -1,9 +1,9 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
     <Meta name="ExplicitAutoJoints">true</Meta>
-    <Item class="ModuleScript" referent="RBXS7D4UJ2I1HJ80U66XF0PXX4S25865W7C">
+    <Item class="ModuleScript" referent="RBXYFS8KGLC2BHYQ31W1KN09L6BZAVZKVQJ">
         <Properties>
             <string name="Name">http</string>
-            <string name="ScriptGuid">{7b8a1617-e42e-443f-8e1c-fbd4cef01439}</string>
+            <string name="ScriptGuid">{7d546f79-f7f4-4e1d-b3d5-a4447f97ab8a}</string>
             <ProtectedString name="Source"><![CDATA[local httpService = game:GetService("HttpService")
 
 local http = { 
@@ -105,6 +105,10 @@ function http:Request(
 	})
 end
 
+function http:GetSecret(key: string)
+	return httpService:GetSecret(key)
+end
+
 function http:UrlEncode(url: string)
 	return httpService:UrlEncode(url)
 end
@@ -119,10 +123,10 @@ end
 
 return http]]></ProtectedString>
         </Properties>
-        <Item class="ModuleScript" referent="RBXNL5VBAZ9MCWBE3QG2461ES0T23D1OP8L">
+        <Item class="ModuleScript" referent="RBXPPA6MP47DAI59R3T7ZEXG72648WUW56N">
             <Properties>
                 <string name="Name">Encryption</string>
-                <string name="ScriptGuid">{7622903a-ddec-4723-89dd-b2ce682435a8}</string>
+                <string name="ScriptGuid">{dc4c9d0b-9865-4bf3-b3e1-fc44cbeeef31}</string>
                 <ProtectedString name="Source"><![CDATA[local Encryption = {
 	Base64 = {}
 }
