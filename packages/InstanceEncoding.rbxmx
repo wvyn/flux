@@ -1,12 +1,14 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
     <Meta name="ExplicitAutoJoints">true</Meta>
-    <Item class="ModuleScript" referent="RBXUX3GEDTUYO94G2UKPUQFMCQDLLBTUQ99">
+    <Item class="ModuleScript" referent="RBX8TG9QZBN42F9FEMC6VDOWLX6JKTTVZ9O">
         <Properties>
             <string name="Name">InstanceEncoding</string>
-            <string name="ScriptGuid">{9cc73e51-d57d-40b3-8c10-d3219830e543}</string>
-            <ProtectedString name="Source"><![CDATA[local assetService = game:GetService("AssetService")
+            <string name="ScriptGuid">{8a9e9df9-c168-41c5-9a7c-61219ea3d3a5}</string>
+            <ProtectedString name="Source"><![CDATA[-- Instance Encoding
+local assetService = game:GetService("AssetService")
 
 local Signal = require("./Signal")
+local GUID = require("./GUID")
 
 local InstanceEncoding = {}
 
@@ -15,6 +17,7 @@ local readOnly = {
 	"ClassName",
 	
 	-- Custom
+	"__IE",
 	"Children",
 	"Tags",
 	"Attributes",
@@ -24,8 +27,70 @@ local readOnly = {
 	"TextureContent"
 }
 
+local Encodings = {
+	BasePart = {
+		"Anchored", "CanCollide", "CanQuery", "CanTouch", "CastShadow",
+		"PivotOffset", "CollisionGroup", "Reflectance", "CFrame", "Color",
+		"Material", "Massless", "Transparency", "Size"
+	},
+
+	RemoteEvent = {},
+	RemoteFunction = {},
+	BindableEvent = {},
+	BindableFunction = {},
+	
+	ParticleEmitter = { 
+		"Color", "LightEmission", "LightInfluence", "Orientation", "Size", "Squash", "Texture", "Transparency",
+		"ZOffset", "EmissionDirection", "Enabled", "Lifetime", "Rate", "Rotation", "RotSpeed", "Speed", "SpreadAngle",
+		"Shape", "ShapeInOut", "ShapeStyle", "FlipbookLayout", "Acceleration", "Drag", "LockedToPart", "TimeScale", "VelocityInheritance",
+		"WindAffectsDrag", "FlipbookMode", "FlipbookFramerate", "FlipbookStartRandom"
+	},
+
+	Animation = { "AnimationId" },
+	Model = { "PrimaryPart", "ModelStreamingMode" },
+	Folder = {},
+
+	MeshPart = { "MeshContent", "TextureContent" },
+
+	Shirt = { "ShirtTemplate", "Color3" },
+	Pants = { "PantsTemplate", "Color3" },
+
+	Weld = { "C0", "C1", "Part0", "Part1", "Enabled" },
+	Motor6D = { "C0", "C1", "Part0", "Part1", "CurrentAngle", "DesiredAngle", "MaxVelocity", "Enabled" },
+	RigidConstraint = { "Color", "Visible", "Enabled", "Attachment0", "Attachment1" },
+
+	ValueBase = { "Value" },
+
+	Humanoid = { 
+		"CameraOffset",  "DisplayDistanceType", "DisplayName",
+		"HealthDisplayDistance", "HealthDisplayType","NameDisplayDistance", "NameOcclusion",
+		"RigType", "BreakJointsOnDeath", "EvaluateStateMachine", "RequiresNeck", "AutoRotate",
+		"Jump", "PlatformStand", "Sit", "Health", "HipHeight", "AutomaticScalingEnabled", "MaxHealth", "MaxSlopeAngle",
+		"WalkSpeed", "AutoJumpEnabled", "JumpPower", "JumpHeight", "UseJumpPower"
+	},
+
+	HumanoidDescription = { 
+		"BackAccessory", "FaceAccessory", "FrontAccessory", "HairAccessory", "HatAccessory",
+		"NeckAccessory", "ShouldersAccessory", "ClimbAnimation", "FallAnimation", "IdleAnimation", "JumpAnimation",
+		"MoodAnimation", "RunAnimation", "SwimAnimation", "WalkAnimation", "HeadColor", "LeftArmColor", "LeftLegColor",
+		"RightArmColor", "RightLegColor", "TorsoColor", "Face", "Head", "LeftArm", "LeftLeg", "RightArm", "RightLeg", "Torso",
+		"GraphicTShirt", "Pants", "Shirt", "BodyTypeScale", "DepthScale", "HeadScale", "HeightScale", "WidthScale", "ProportionScale"
+	},
+
+	BodyPartDescription = { "AssetId", "BodyPart", "Color", "Instance" },
+	BodyColors = { "HeadColor3", "LeftArmColor3", "LeftLegColor3", "RightArmColor3", "RightLegColor3", "TorsoColor3" },
+
+	SpecialMesh = { "MeshId", "MeshType", "Offset", "Scale", "TextureId", "VertexColor" },
+
+	Animator = { "PreferLodEnabled" },
+	Decal = { "Color3", "Texture", "TextureContent", "Transparency", "ZIndex" },
+	Attachment = { "Visible", "CFrame", "Axis", "SecondaryAxis" }
+}
+
 local function encodeBaseInstance(instance: Instance): EncodedBaseInstance
 	return {
+		__IE = GUID.new(),
+		Archivable = instance.Archivable,
 		ClassName = instance.ClassName,
 		Name = instance.Name,
 		Children = {},
@@ -34,38 +99,52 @@ local function encodeBaseInstance(instance: Instance): EncodedBaseInstance
 	}
 end
 
-local function encodeBasePart(instance: BasePart): EncodedBasePart
-	local basePart = encodeBaseInstance(instance)
+function InstanceEncoding.EncodeInstance(self: InstanceEncoding, instance: Instance, _instances: {}?, _instanceProperties: {}?)
+	local encodedInstance = encodeBaseInstance(instance)
 	
-	for i, v in next, 
-		{
-			Anchored = instance.Anchored,
-			CanCollide = instance.CanCollide,
-			CanQuery = instance.CanQuery,
-			CanTouch = instance.CanTouch,
-			CastShadow = instance.CastShadow,
-			PivotOffset = instance.PivotOffset,
-			CollisionGroup = instance.CollisionGroup,
-			Reflectance = instance.Reflectance,
-			CFrame = instance.CFrame,
-			Color = instance.Color,
-			Material = instance.Material,
-			Massless = instance.Massless,
-			Transparency = instance.Transparency,
-			Size = instance.Size,
-		} do
-		basePart[i] = v
+	local instances = _instances or {}
+	local instanceProperties = _instanceProperties or {}
+	
+	for classType, properties in next, Encodings do
+		if instance:IsA(classType) then
+			for _, property in next, properties do
+				local value = instance[property]
+				if typeof(value) == "Instance" then
+					instanceProperties[#instanceProperties + 1] = { Encoded = encodedInstance, Property = property, Value = value }
+				end
+				encodedInstance[property] = value
+			end
+		end
+		
+		instances[instance] = encodedInstance
 	end
-
-	return basePart
+	
+	local children = encodedInstance.Children
+	for _, instanceChildren in next, instance:GetChildren() do
+		children[#children + 1] = self:EncodeInstance(instanceChildren, instances, instanceProperties)
+	end
+	
+	for _, propertyData in next, instanceProperties do
+		local value = instances[propertyData.Value]
+		if value then
+			propertyData.Encoded[propertyData.Property] = { __IE = value.__IE }
+			table.remove(instanceProperties, table.find(instanceProperties, propertyData))
+		end
+	end
+	
+	return encodedInstance
 end
 
-local function applyDecodedProperties(instance: Instance, properties: EncodedBasePart)
+local function applyDecodedProperties(instance: Instance, properties: EncodedBasePart, instanceProperties: {})
 	for propertyIndex, propertyValue in next, properties do
 		if table.find(readOnly, propertyIndex) then continue end
-		instance[propertyIndex] = propertyValue
+		if typeof(propertyValue) == "table" and propertyValue.__IE then
+			instanceProperties[#instanceProperties + 1] = { Instance = instance, Property = propertyIndex, Target = propertyValue.__IE }
+		else
+			instance[propertyIndex] = propertyValue
+		end
 	end
-	
+
 	for _, tag in next, properties.Tags do
 		instance:AddTag(tag)
 	end; for attributeName, value in next, properties.Attributes do
@@ -73,64 +152,22 @@ local function applyDecodedProperties(instance: Instance, properties: EncodedBas
 	end
 end
 
-local function encodeClothing(clothing: Clothing)
-	local encodedClothing = encodeBaseInstance(clothing)
-	encodedClothing.Color3 = clothing.Color3
+function InstanceEncoding.DecodeInstance(self: InstanceEncoding, encodedInstance: EncodedBasePart, responseForward: DecodeResponse?, _instances: {}?, _instanceProperties: {}?): DecodeResponse
+	local instances = _instances or {}
+	local instanceProperties = _instanceProperties or {}
 	
-	local templateIndex = `{clothing:IsA("Pants") and "Pants" or "Shirt"}Template`
-	encodedClothing[templateIndex] = clothing[templateIndex]
-	
-	return encodedClothing
-end
-
-local function encodeValueBase(valueBase: ValueBase)
-	local encodedValueBase = encodeBaseInstance(valueBase)
-	encodedValueBase.Value = valueBase
-	return encodedValueBase
-end
-
-function InstanceEncoding.EncodeInstance(self: InstanceEncoding, instance: Instance)
-	local encodedInstance: EncodedBasePart
-	if instance:IsA("BasePart") then
-		local basePart = encodeBasePart(instance)
-		if instance:IsA("MeshPart") then
-			basePart.MeshContent = instance.MeshContent
-			basePart.TextureContent = instance.TextureContent
-		end
-		encodedInstance = basePart
-	elseif instance:IsA("Model") or instance:IsA("Folder") then
-		encodedInstance = encodeBaseInstance(instance)
-	elseif instance:IsA("Clothing") then
-		encodedInstance = encodeClothing(instance)
-	elseif instance:IsA("ValueBase") then
-		encodedInstance = encodeValueBase(instance)
-	end
-	
-	if encodedInstance then
-		local children = encodedInstance.Children
-		for _, instanceChildren in next, instance:GetChildren() do
-			children[#children + 1] = self:EncodeInstance(instanceChildren)
-		end
-	end
-	
-	return encodedInstance
-end
-
-function InstanceEncoding.DecodeInstance(self: InstanceEncoding, encodedInstance: EncodedBasePart, responseForward: DecodeResponse?): DecodeResponse
 	local instance: Instance
 	if encodedInstance.ClassName == "MeshPart" then
 		local meshPart = assetService:CreateMeshPartAsync(encodedInstance.MeshContent)
-		applyDecodedProperties(meshPart, encodedInstance)
+		applyDecodedProperties(meshPart, encodedInstance, instanceProperties)
 		instance = meshPart
-	elseif encodedInstance.ClassName == "Part" then
-		local part = Instance.new(encodedInstance.ClassName)
-		applyDecodedProperties(part, encodedInstance)
-		instance = part
 	else
 		local container = Instance.new(encodedInstance.ClassName)
-		applyDecodedProperties(container, encodedInstance)
+		applyDecodedProperties(container, encodedInstance, instanceProperties)
 		instance = container
 	end
+	
+	instances[encodedInstance.__IE] = instance
 	
 	responseForward = responseForward or {}
 	local response = {
@@ -148,7 +185,7 @@ function InstanceEncoding.DecodeInstance(self: InstanceEncoding, encodedInstance
 	
 	for _, children in next, encodedInstance.Children do
 		response.Threads[#response.Threads + 1] = task.spawn(function()
-			local childrenInstance = self:DecodeInstance(children, response)
+			local childrenInstance = self:DecodeInstance(children, response, instances, instanceProperties)
 			if not childrenInstance.IsLoaded then childrenInstance.Loaded:Wait() end
 			childrenInstance.Instance.Parent = instance
 			
@@ -161,6 +198,14 @@ function InstanceEncoding.DecodeInstance(self: InstanceEncoding, encodedInstance
 			response.ChildLoaded:Fire(childrenInstance)
 			response.DescendantLoaded:Fire(childrenInstance)
 		end)
+	end
+	
+	for _, propertyData in next, instanceProperties do
+		local value = instances[propertyData.Target]
+		if value then
+			propertyData.Instance[propertyData.Property] = value
+			table.remove(instanceProperties, table.find(instanceProperties, propertyData))
+		end
 	end
 	
 	return response
