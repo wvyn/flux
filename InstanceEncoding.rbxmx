@@ -1,0 +1,310 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+	<Meta name="ExplicitAutoJoints">true</Meta>
+	<External>null</External>
+	<External>nil</External>
+	<Item class="ModuleScript" referent="RBX8B78566BD8104107B42C329717FCF8BD">
+		<Properties>
+			<Content name="LinkedSource"><null></null></Content>
+			<ProtectedString name="Source"><![CDATA[local reflectionService = game:GetService("ReflectionService")
+local assetService = game:GetService("AssetService")
+
+local Signal = require("@self/Signal")
+
+local securityCapabilities = SecurityCapabilities.new(
+	Enum.SecurityCapability.Basic
+)
+
+local tableFind = table.find
+local tableRemove = table.remove
+
+local taskSpawn = task.spawn
+
+local whitelistProperties = {
+	"MeshContent"
+}
+
+local function getPropertiesOfClass(className: string)
+	local reflectionProperties = reflectionService:GetPropertiesOfClass(className, {
+		Security = securityCapabilities,
+		ExcludeDisplay = false
+	})
+	
+	if not reflectionProperties then return {} end
+	
+	local properties: { string } = {}
+	for _, reflectionProperty in next, reflectionProperties do
+		if not (reflectionProperty.Permits.Write and reflectionProperty.Permits.Read or tableFind(whitelistProperties, reflectionProperty.Name)) then continue end
+		if reflectionProperty.Display.DeprecationMessage then continue end
+		
+		properties[#properties + 1] = reflectionProperty.Name
+	end
+	
+	local parentIndex = tableFind(properties, "Parent")
+	if parentIndex then tableRemove(properties, parentIndex) end
+	
+	return properties
+end
+
+local InstanceEncoding = {}
+
+local function encodeInstance(instance: Instance)
+	local properties = getPropertiesOfClass(instance.ClassName)
+	local encodedProperties = {}
+	
+	for _, property in next, properties do
+		encodedProperties[property] = instance[property]
+	end
+	
+	local encodedChildren = {}
+	for _, child in next, instance:GetChildren() do
+		encodedChildren[#encodedChildren + 1] = encodeInstance(child)
+	end
+	
+	return {
+		Class = instance.ClassName,
+		Properties = encodedProperties,
+		Children = encodedChildren
+	}
+end
+
+function InstanceEncoding:EncodeInstance(instance: Instance): EncodedInstance
+	return encodeInstance(instance)
+end
+
+local function decodeMeshPart(encoded: EncodedInstance)
+	return assetService:CreateMeshPartAsync(encoded.Properties.MeshContent)
+end
+
+local function decodeInstance(encoded: EncodedInstance, singleThread: boolean?, status: Status?, events: Events?)
+	local instance: Instance
+	if encoded.Class == "MeshPart" then
+		instance = decodeMeshPart(encoded)
+	else
+		instance = Instance.new(encoded.Class)
+	end
+	
+	for property, value in next, encoded.Properties do
+		if tableFind(whitelistProperties, property) then continue end
+		instance[property] = value
+	end
+	
+	local encodedChildren = encoded.Children
+	local loadedIndex = 0
+	for _, encodedChild in next, encodedChildren do
+		local function decodeChild()
+			local childInstance = decodeInstance(encodedChild, singleThread, nil, events)
+			childInstance.Parent = instance
+			
+			loadedIndex += 1
+			
+			if status then
+				events.OnChildLoaded:Fire(childInstance)
+				if loadedIndex == #encodedChildren then
+					status.IsLoaded = true
+					events.OnLoaded:Fire()
+				end
+			else
+				events.OnDescendantLoaded:Fire(childInstance)
+			end
+		end
+		
+		if singleThread then
+			decodeChild(singleThread)
+		else
+			taskSpawn(decodeChild)
+		end
+	end
+	
+	return instance
+end
+
+function InstanceEncoding:DecodeInstance(encoded: EncodedInstance, singleThread: boolean?): DecodedInstance
+	local status = {
+		IsLoaded = false
+	}
+	
+	local events = {
+		OnLoaded = Signal.new(),
+		OnChildLoaded = Signal.new(),
+		OnDescendantLoaded = Signal.new()
+	}
+	
+	return {
+		Instance = decodeInstance(encoded, singleThread, status, events),
+		Status = status,
+		Events = events
+	}
+end
+
+export type EncodedInstance = {
+	Class: string,
+	Properties: { [string]: any },
+	Children: { EncodedInstance }
+}
+
+export type DecodedInstance = {
+	Instance: Instance,
+	Status: Status,
+	Events: Events
+}
+
+type Status = {
+	IsLoaded: boolean
+}
+
+type Events = {
+	OnLoaded: Signal.Signal,
+	OnChildLoaded: Signal.Signal,
+	OnDescendantLoaded: Signal.Signal
+}
+
+return InstanceEncoding]]></ProtectedString>
+			<string name="ScriptGuid">{EE871EAC-DB34-4F3F-A3BF-794D076C5D45}</string>
+			<BinaryString name="AttributesSerialize"></BinaryString>
+			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+			<bool name="DefinesCapabilities">false</bool>
+			<string name="Name">InstanceEncoding</string>
+			<int64 name="SourceAssetId">-1</int64>
+			<BinaryString name="Tags"></BinaryString>
+		</Properties>
+		<Item class="ModuleScript" referent="RBX2ED13AD234764F2D824941CD842186F4">
+			<Properties>
+				<Content name="LinkedSource"><null></null></Content>
+				<ProtectedString name="Source"><![CDATA[local SignalConstructor = {}
+local SignalMethods = {}
+
+local tableRemove = table.remove
+local tableFind = table.find
+
+local coroutineRunning = coroutine.running
+local coroutineYield = coroutine.yield
+
+local taskDelay = task.delay
+local taskCancel = task.cancel
+
+function SignalConstructor.new()
+	return setmetatable({ _connections = {} :: { SignalConnection } }, { __index = SignalMethods })
+end
+
+local taskSpawn = task.spawn
+function SignalMethods:Fire<parameters...>(...: parameters...): parameters...
+	for _, connection in next, self._connections do
+		taskSpawn(connection[1], ...)
+	end; return ...
+end
+
+function SignalMethods:Invoke<parameters...>(...: parameters...): { any }
+	local responses = {}
+	for _, connection in next, self._connections do
+		responses[#responses + 1] = connection[1](...) or false
+	end; return responses
+end
+
+local Connection = {}
+function Connection:Disconnect()
+	local _, connections = unpack(self)
+
+	local connectionIndex = tableFind(connections, self)
+	if connectionIndex then
+		tableRemove(connections, connectionIndex)
+	end
+end
+
+function SignalMethods:Connect(func: () -> (), ...)
+	if ... then
+		local subFunction = func
+		local parameters = {...}
+		func = function() subFunction(unpack(parameters)) end 
+	end
+
+	local connections = self._connections
+	local SignalConnection = setmetatable({ func, connections }, { __index = Connection })
+	connections[#connections + 1] = SignalConnection
+	return SignalConnection
+end
+
+function SignalMethods:DisconnectAll()
+	local connections = self._connections
+	for connectionIndex in next, connections do
+		connections[connectionIndex] = nil
+	end
+end
+
+function SignalMethods:Wait(timeout: number?)
+	local thread = coroutineRunning()
+
+	local connection
+
+	local timeoutThread
+	if timeout then
+		timeoutThread = taskDelay(timeout, function() 
+			connection:Disconnect(); 
+			connection = nil; 
+
+			timeoutThread = nil;
+
+			taskSpawn(thread)
+		end)
+	end
+
+	connection = self:Connect(function(...)
+		connection:Disconnect()
+		taskSpawn(thread, ...)
+		if timeoutThread then 
+			taskCancel(timeoutThread);
+			timeoutThread = nil 
+		end
+	end)
+
+	return coroutineYield()
+end
+
+function SignalMethods:Once(func: () -> (), ...)
+	if ... then
+		local subFunction = func
+		local parameters = {...}
+		func = function() subFunction(unpack(parameters)) end 
+	end
+
+	local connection
+	connection = self:Connect(function(...)
+		connection:Disconnect()
+		connection = nil
+
+		taskSpawn(func, ...)
+	end)
+
+	return connection
+end
+
+function SignalMethods:Destroy()
+	self:DisconnectAll()
+
+	local connections = self._connections
+	for i in next, connections do
+		connections[i] = nil
+	end
+
+	for i in next, self do
+		self[i] = nil
+	end
+
+	setmetatable(self, nil)
+	return true
+end
+
+export type SignalConnection = typeof(Connection)
+export type Signal = typeof(SignalConstructor.new())
+
+return SignalConstructor]]></ProtectedString>
+				<string name="ScriptGuid">{959DB92E-F61A-4448-9CE5-0A2B86328117}</string>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<string name="Name">Signal</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+			</Properties>
+		</Item>
+	</Item>
+</roblox>
