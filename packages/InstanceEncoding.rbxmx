@@ -1,258 +1,310 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
-    <Meta name="ExplicitAutoJoints">true</Meta>
-    <Item class="ModuleScript" referent="RBX8TG9QZBN42F9FEMC6VDOWLX6JKTTVZ9O">
-        <Properties>
-            <string name="Name">InstanceEncoding</string>
-            <string name="ScriptGuid">{8a9e9df9-c168-41c5-9a7c-61219ea3d3a5}</string>
-            <ProtectedString name="Source"><![CDATA[-- Instance Encoding
+	<Meta name="ExplicitAutoJoints">true</Meta>
+	<External>null</External>
+	<External>nil</External>
+	<Item class="ModuleScript" referent="RBX8B78566BD8104107B42C329717FCF8BD">
+		<Properties>
+			<Content name="LinkedSource"><null></null></Content>
+			<ProtectedString name="Source"><![CDATA[local reflectionService = game:GetService("ReflectionService")
 local assetService = game:GetService("AssetService")
 
-local Signal = require("./Signal")
-local GUID = require("./GUID")
+local Signal = require("@self/Signal")
+
+local securityCapabilities = SecurityCapabilities.new(
+	Enum.SecurityCapability.Basic
+)
+
+local tableFind = table.find
+local tableRemove = table.remove
+
+local taskSpawn = task.spawn
+
+local whitelistProperties = {
+	"MeshContent"
+}
+
+local function getPropertiesOfClass(className: string)
+	local reflectionProperties = reflectionService:GetPropertiesOfClass(className, {
+		Security = securityCapabilities,
+		ExcludeDisplay = false
+	})
+	
+	if not reflectionProperties then return {} end
+	
+	local properties: { string } = {}
+	for _, reflectionProperty in next, reflectionProperties do
+		if not (reflectionProperty.Permits.Write and reflectionProperty.Permits.Read or tableFind(whitelistProperties, reflectionProperty.Name)) then continue end
+		if reflectionProperty.Display.DeprecationMessage then continue end
+		
+		properties[#properties + 1] = reflectionProperty.Name
+	end
+	
+	local parentIndex = tableFind(properties, "Parent")
+	if parentIndex then tableRemove(properties, parentIndex) end
+	
+	return properties
+end
 
 local InstanceEncoding = {}
 
-local readOnly = {
-	-- Instance
-	"ClassName",
+local function encodeInstance(instance: Instance)
+	local properties = getPropertiesOfClass(instance.ClassName)
+	local encodedProperties = {}
 	
-	-- Custom
-	"__IE",
-	"Children",
-	"Tags",
-	"Attributes",
+	for _, property in next, properties do
+		encodedProperties[property] = instance[property]
+	end
 	
-	-- MeshPart
-	"MeshContent",
-	"TextureContent"
-}
-
-local Encodings = {
-	BasePart = {
-		"Anchored", "CanCollide", "CanQuery", "CanTouch", "CastShadow",
-		"PivotOffset", "CollisionGroup", "Reflectance", "CFrame", "Color",
-		"Material", "Massless", "Transparency", "Size"
-	},
-
-	RemoteEvent = {},
-	RemoteFunction = {},
-	BindableEvent = {},
-	BindableFunction = {},
+	local encodedChildren = {}
+	for _, child in next, instance:GetChildren() do
+		encodedChildren[#encodedChildren + 1] = encodeInstance(child)
+	end
 	
-	ParticleEmitter = { 
-		"Color", "LightEmission", "LightInfluence", "Orientation", "Size", "Squash", "Texture", "Transparency",
-		"ZOffset", "EmissionDirection", "Enabled", "Lifetime", "Rate", "Rotation", "RotSpeed", "Speed", "SpreadAngle",
-		"Shape", "ShapeInOut", "ShapeStyle", "FlipbookLayout", "Acceleration", "Drag", "LockedToPart", "TimeScale", "VelocityInheritance",
-		"WindAffectsDrag", "FlipbookMode", "FlipbookFramerate", "FlipbookStartRandom"
-	},
-
-	Animation = { "AnimationId" },
-	Model = { "PrimaryPart", "ModelStreamingMode" },
-	Folder = {},
-
-	MeshPart = { "MeshContent", "TextureContent" },
-
-	Shirt = { "ShirtTemplate", "Color3" },
-	Pants = { "PantsTemplate", "Color3" },
-
-	Weld = { "C0", "C1", "Part0", "Part1", "Enabled" },
-	Motor6D = { "C0", "C1", "Part0", "Part1", "CurrentAngle", "DesiredAngle", "MaxVelocity", "Enabled" },
-	RigidConstraint = { "Color", "Visible", "Enabled", "Attachment0", "Attachment1" },
-
-	ValueBase = { "Value" },
-
-	Humanoid = { 
-		"CameraOffset",  "DisplayDistanceType", "DisplayName",
-		"HealthDisplayDistance", "HealthDisplayType","NameDisplayDistance", "NameOcclusion",
-		"RigType", "BreakJointsOnDeath", "EvaluateStateMachine", "RequiresNeck", "AutoRotate",
-		"Jump", "PlatformStand", "Sit", "Health", "HipHeight", "AutomaticScalingEnabled", "MaxHealth", "MaxSlopeAngle",
-		"WalkSpeed", "AutoJumpEnabled", "JumpPower", "JumpHeight", "UseJumpPower"
-	},
-
-	HumanoidDescription = { 
-		"BackAccessory", "FaceAccessory", "FrontAccessory", "HairAccessory", "HatAccessory",
-		"NeckAccessory", "ShouldersAccessory", "ClimbAnimation", "FallAnimation", "IdleAnimation", "JumpAnimation",
-		"MoodAnimation", "RunAnimation", "SwimAnimation", "WalkAnimation", "HeadColor", "LeftArmColor", "LeftLegColor",
-		"RightArmColor", "RightLegColor", "TorsoColor", "Face", "Head", "LeftArm", "LeftLeg", "RightArm", "RightLeg", "Torso",
-		"GraphicTShirt", "Pants", "Shirt", "BodyTypeScale", "DepthScale", "HeadScale", "HeightScale", "WidthScale", "ProportionScale"
-	},
-
-	BodyPartDescription = { "AssetId", "BodyPart", "Color", "Instance" },
-	BodyColors = { "HeadColor3", "LeftArmColor3", "LeftLegColor3", "RightArmColor3", "RightLegColor3", "TorsoColor3" },
-
-	SpecialMesh = { "MeshId", "MeshType", "Offset", "Scale", "TextureId", "VertexColor" },
-
-	Animator = { "PreferLodEnabled" },
-	Decal = { "Color3", "Texture", "TextureContent", "Transparency", "ZIndex" },
-	Attachment = { "Visible", "CFrame", "Axis", "SecondaryAxis" }
-}
-
-local function encodeBaseInstance(instance: Instance): EncodedBaseInstance
 	return {
-		__IE = GUID.new(),
-		Archivable = instance.Archivable,
-		ClassName = instance.ClassName,
-		Name = instance.Name,
-		Children = {},
-		Tags = instance:GetTags(),
-		Attributes = instance:GetAttributes()
+		Class = instance.ClassName,
+		Properties = encodedProperties,
+		Children = encodedChildren
 	}
 end
 
-function InstanceEncoding.EncodeInstance(self: InstanceEncoding, instance: Instance, _instances: {}?, _instanceProperties: {}?)
-	local encodedInstance = encodeBaseInstance(instance)
-	
-	local instances = _instances or {}
-	local instanceProperties = _instanceProperties or {}
-	
-	for classType, properties in next, Encodings do
-		if instance:IsA(classType) then
-			for _, property in next, properties do
-				local value = instance[property]
-				if typeof(value) == "Instance" then
-					instanceProperties[#instanceProperties + 1] = { Encoded = encodedInstance, Property = property, Value = value }
-				end
-				encodedInstance[property] = value
-			end
-		end
-		
-		instances[instance] = encodedInstance
-	end
-	
-	local children = encodedInstance.Children
-	for _, instanceChildren in next, instance:GetChildren() do
-		children[#children + 1] = self:EncodeInstance(instanceChildren, instances, instanceProperties)
-	end
-	
-	for _, propertyData in next, instanceProperties do
-		local value = instances[propertyData.Value]
-		if value then
-			propertyData.Encoded[propertyData.Property] = { __IE = value.__IE }
-			table.remove(instanceProperties, table.find(instanceProperties, propertyData))
-		end
-	end
-	
-	return encodedInstance
+function InstanceEncoding:EncodeInstance(instance: Instance): EncodedInstance
+	return encodeInstance(instance)
 end
 
-local function applyDecodedProperties(instance: Instance, properties: EncodedBasePart, instanceProperties: {})
-	for propertyIndex, propertyValue in next, properties do
-		if table.find(readOnly, propertyIndex) then continue end
-		if typeof(propertyValue) == "table" and propertyValue.__IE then
-			instanceProperties[#instanceProperties + 1] = { Instance = instance, Property = propertyIndex, Target = propertyValue.__IE }
-		else
-			instance[propertyIndex] = propertyValue
-		end
-	end
-
-	for _, tag in next, properties.Tags do
-		instance:AddTag(tag)
-	end; for attributeName, value in next, properties.Attributes do
-		instance:SetAttribute(attributeName, value)
-	end
+local function decodeMeshPart(encoded: EncodedInstance)
+	return assetService:CreateMeshPartAsync(encoded.Properties.MeshContent)
 end
 
-function InstanceEncoding.DecodeInstance(self: InstanceEncoding, encodedInstance: EncodedBasePart, responseForward: DecodeResponse?, _instances: {}?, _instanceProperties: {}?): DecodeResponse
-	local instances = _instances or {}
-	local instanceProperties = _instanceProperties or {}
-	
+local function decodeInstance(encoded: EncodedInstance, singleThread: boolean?, status: Status?, events: Events?)
 	local instance: Instance
-	if encodedInstance.ClassName == "MeshPart" then
-		local meshPart = assetService:CreateMeshPartAsync(encodedInstance.MeshContent)
-		applyDecodedProperties(meshPart, encodedInstance, instanceProperties)
-		instance = meshPart
+	if encoded.Class == "MeshPart" then
+		instance = decodeMeshPart(encoded)
 	else
-		local container = Instance.new(encodedInstance.ClassName)
-		applyDecodedProperties(container, encodedInstance, instanceProperties)
-		instance = container
+		instance = Instance.new(encoded.Class)
 	end
 	
-	instances[encodedInstance.__IE] = instance
+	for property, value in next, encoded.Properties do
+		if tableFind(whitelistProperties, property) then continue end
+		instance[property] = value
+	end
 	
-	responseForward = responseForward or {}
-	local response = {
-		IsLoaded = #encodedInstance.Children == 0,
-		LoadedIndex = 1,
-		Instance = instance,
-		
-		Threads = {} :: { thread },
-		
-		-- Events
-		DescendantLoaded = responseForward.DescendantLoaded or Signal.new(),
-		ChildLoaded = Signal.new(),
-		Loaded = Signal.new(),
-	}
-	
-	for _, children in next, encodedInstance.Children do
-		response.Threads[#response.Threads + 1] = task.spawn(function()
-			local childrenInstance = self:DecodeInstance(children, response, instances, instanceProperties)
-			if not childrenInstance.IsLoaded then childrenInstance.Loaded:Wait() end
-			childrenInstance.Instance.Parent = instance
+	local encodedChildren = encoded.Children
+	local loadedIndex = 0
+	for _, encodedChild in next, encodedChildren do
+		local function decodeChild()
+			local childInstance = decodeInstance(encodedChild)
+			childInstance.Parent = instance
 			
-			response.LoadedIndex += 1
-			if response.LoadedIndex - 1 == #encodedInstance.Children then
-				response.IsLoaded = true
-				response.Loaded:Fire(childrenInstance)
+			loadedIndex += 1
+			
+			if status then
+				events.OnChildLoaded:Fire(childInstance)
+				if loadedIndex == #encodedChildren then
+					status.IsLoaded = true
+					events.OnLoaded:Fire()
+				end
+			else
+				events.OnDescendantLoaded:Fire(childInstance)
 			end
-			
-			response.ChildLoaded:Fire(childrenInstance)
-			response.DescendantLoaded:Fire(childrenInstance)
-		end)
-	end
-	
-	for _, propertyData in next, instanceProperties do
-		local value = instances[propertyData.Target]
-		if value then
-			propertyData.Instance[propertyData.Property] = value
-			table.remove(instanceProperties, table.find(instanceProperties, propertyData))
+		end
+		
+		if singleThread then
+			decodeChild()
+		else
+			taskSpawn(decodeChild)
 		end
 	end
 	
-	return response
+	return instance
 end
 
-export type DecodeResponse = {
-	IsLoaded: boolean,
-	LoadedIndex: number,
+function InstanceEncoding:DecodeInstance(encoded: EncodedInstance, singleThread: boolean?): DecodedInstance
+	local status = {
+		IsLoaded = false
+	}
+	
+	local events = {
+		OnLoaded = Signal.new(),
+		OnChildLoaded = Signal.new(),
+		OnDescendantLoaded = Signal.new()
+	}
+	
+	return {
+		Instance = decodeInstance(encoded, singleThread, status, events),
+		Status = status,
+		Events = events
+	}
+end
+
+export type EncodedInstance = {
+	Class: string,
+	Properties: { [string]: any },
+	Children: { EncodedInstance }
+}
+
+export type DecodedInstance = {
 	Instance: Instance,
-	
-	DescendantLoaded: Signal.Signal,
-	ChildLoaded: Signal.Signal,
-	Loaded: Signal.Signal
+	Status: Status,
+	Events: Events
 }
 
-export type EncodedBaseInstance = {
-	ClassName: string,
-	Name: string,
-	Children: { EncodedBaseInstance | EncodedBasePart }
+type Status = {
+	IsLoaded: boolean
 }
 
-export type EncodedBasePart = {
-	-- BaseInstance
-	ClassName: string,
-	Name: string,
-	Children: { EncodedBaseInstance | EncodedBasePart },
-	
-	-- BasePart
-	Anchored: boolean,
-	CanCollide: boolean,
-	CanQuery: boolean,
-	CanTouch: boolean,
-	CastShadow: boolean,
-	PivotOffset: Vector3,
-	CollisionGroup: string,
-	Reflectance: number,
-	CFrame: CFrame,
-	Color: Color3,
-	Material: Enum.Material,
-	Massless: boolean,
-	Transparency: number,
-	Size: Vector3
+type Events = {
+	OnLoaded: Signal.Signal,
+	OnChildLoaded: Signal.Signal,
+	OnDescendantLoaded: Signal.Signal
 }
-
-export type InstanceEncoding = typeof(InstanceEncoding)
 
 return InstanceEncoding]]></ProtectedString>
-        </Properties>
-    </Item>
+			<string name="ScriptGuid">{EE871EAC-DB34-4F3F-A3BF-794D076C5D45}</string>
+			<BinaryString name="AttributesSerialize"></BinaryString>
+			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+			<bool name="DefinesCapabilities">false</bool>
+			<string name="Name">InstanceEncoding</string>
+			<int64 name="SourceAssetId">-1</int64>
+			<BinaryString name="Tags"></BinaryString>
+		</Properties>
+		<Item class="ModuleScript" referent="RBX2ED13AD234764F2D824941CD842186F4">
+			<Properties>
+				<Content name="LinkedSource"><null></null></Content>
+				<ProtectedString name="Source"><![CDATA[local SignalConstructor = {}
+local SignalMethods = {}
+
+local tableRemove = table.remove
+local tableFind = table.find
+
+local coroutineRunning = coroutine.running
+local coroutineYield = coroutine.yield
+
+local taskDelay = task.delay
+local taskCancel = task.cancel
+
+function SignalConstructor.new()
+	return setmetatable({ _connections = {} :: { SignalConnection } }, { __index = SignalMethods })
+end
+
+local taskSpawn = task.spawn
+function SignalMethods:Fire<parameters...>(...: parameters...): parameters...
+	for _, connection in next, self._connections do
+		taskSpawn(connection[1], ...)
+	end; return ...
+end
+
+function SignalMethods:Invoke<parameters...>(...: parameters...): { any }
+	local responses = {}
+	for _, connection in next, self._connections do
+		responses[#responses + 1] = connection[1](...) or false
+	end; return responses
+end
+
+local Connection = {}
+function Connection:Disconnect()
+	local _, connections = unpack(self)
+
+	local connectionIndex = tableFind(connections, self)
+	if connectionIndex then
+		tableRemove(connections, connectionIndex)
+	end
+end
+
+function SignalMethods:Connect(func: () -> (), ...)
+	if ... then
+		local subFunction = func
+		local parameters = {...}
+		func = function() subFunction(unpack(parameters)) end 
+	end
+
+	local connections = self._connections
+	local SignalConnection = setmetatable({ func, connections }, { __index = Connection })
+	connections[#connections + 1] = SignalConnection
+	return SignalConnection
+end
+
+function SignalMethods:DisconnectAll()
+	local connections = self._connections
+	for connectionIndex in next, connections do
+		connections[connectionIndex] = nil
+	end
+end
+
+function SignalMethods:Wait(timeout: number?)
+	local thread = coroutineRunning()
+
+	local connection
+
+	local timeoutThread
+	if timeout then
+		timeoutThread = taskDelay(timeout, function() 
+			connection:Disconnect(); 
+			connection = nil; 
+
+			timeoutThread = nil;
+
+			taskSpawn(thread)
+		end)
+	end
+
+	connection = self:Connect(function(...)
+		connection:Disconnect()
+		taskSpawn(thread, ...)
+		if timeoutThread then 
+			taskCancel(timeoutThread);
+			timeoutThread = nil 
+		end
+	end)
+
+	return coroutineYield()
+end
+
+function SignalMethods:Once(func: () -> (), ...)
+	if ... then
+		local subFunction = func
+		local parameters = {...}
+		func = function() subFunction(unpack(parameters)) end 
+	end
+
+	local connection
+	connection = self:Connect(function(...)
+		connection:Disconnect()
+		connection = nil
+
+		taskSpawn(func, ...)
+	end)
+
+	return connection
+end
+
+function SignalMethods:Destroy()
+	self:DisconnectAll()
+
+	local connections = self._connections
+	for i in next, connections do
+		connections[i] = nil
+	end
+
+	for i in next, self do
+		self[i] = nil
+	end
+
+	setmetatable(self, nil)
+	return true
+end
+
+export type SignalConnection = typeof(Connection)
+export type Signal = typeof(SignalConstructor.new())
+
+return SignalConstructor]]></ProtectedString>
+				<string name="ScriptGuid">{959DB92E-F61A-4448-9CE5-0A2B86328117}</string>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<string name="Name">Signal</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+			</Properties>
+		</Item>
+	</Item>
 </roblox>
