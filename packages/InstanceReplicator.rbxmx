@@ -75,6 +75,22 @@ function AssemblyMethods.CompareReferences(self: Assembly, referenceA: any, refe
 	self.Instructions[#self.Instructions + 1] = { "CompareReferences", referenceA, referenceB, resultReference }
 end
 
+function AssemblyMethods.CompareGreaterThanReferences(self: Assembly, referenceA: any, referenceB: any, resultReference: any)
+	self.Instructions[#self.Instructions + 1] = { "CompareGreaterThanReferences", referenceA, referenceB, resultReference }
+end
+
+function AssemblyMethods.CompareLessThanReferences(self: Assembly, referenceA: any, referenceB: any, resultReference: any)
+	self.Instructions[#self.Instructions + 1] = { "CompareLessThanReferences", referenceA, referenceB, resultReference }
+end
+
+function AssemblyMethods.SetReferenceStringConcat(self: Assembly, referenceA: any, referenceB: any, resultReference: any)
+	self.Instructions[#self.Instructions + 1] = { "SetReferenceStringConcat", referenceA, referenceB, resultReference }
+end
+
+function AssemblyMethods.SetInstructionConditionBlock(self: Assembly, conditionReference: any, compliedInstructions: { any })
+	self.Instructions[#self.Instructions + 1] = { "SetInstructionConditionBlock", conditionReference, compliedInstructions }
+end
+
 function AssemblyMethods.Print(self: Assembly, reference: any)
 	self.Instructions[#self.Instructions + 1] = { "Print", reference }
 end
@@ -167,9 +183,29 @@ local function readInstruction(references: {}, instruction: any)
 	elseif instruction[1] == "SetNotReference" then
 		local result = not references[instruction[2]]
 		references[instruction[3]] = result
+		return result
 	elseif instruction[1] == "CompareReferences" then
 		local result = references[instruction[2]] == references[instruction[3]]
 		references[instruction[4]] = result
+		return result
+	elseif instruction[1] == "CompareGreaterThanReferences" then
+		local result = references[instruction[2]] > references[instruction[3]]
+		references[instruction[4]] = result
+		return result
+	elseif instruction[1] == "CompareLessThanReferences" then
+		local result = references[instruction[2]] < references[instruction[3]]
+		references[instruction[4]] = result
+		return result
+	elseif instruction[1] == "SetReferenceStringConcat" then
+		local result = (references[instruction[2]] or "")..(references[instruction[3]] or "")
+		references[instruction[4]] = result
+		return result
+	elseif instruction[1] == "SetInstructionConditionBlock" then
+		if references[instruction[2]] then
+			for _, blockInstructions in next, instruction[3] do
+				readInstruction(references, blockInstructions)
+			end
+		end
 	elseif instruction[1] == "SetProperty" then
 		local value = typeof(instruction[4]) == "table" and readInstruction(references, instruction[4]) or instruction[4]
 		references[instruction[2]][instruction[3]] = value
@@ -183,6 +219,7 @@ local function readInstruction(references: {}, instruction: any)
 		return value
 	elseif instruction[1] == "Clone" then
 		references[instruction[3]] = references[instruction[2]]:Clone()
+		return references[instruction[3]]
 	elseif instruction[1] == "GetReference" then
 		return references[instruction[2]]
 	elseif instruction[1] == "ExitCondition" then
