@@ -144,6 +144,10 @@ function AssemblyMethods.SetProperty(self: Assembly, reference: any, property: s
 	self.Instructions[#self.Instructions + 1] = { "SetProperty", reference, property, value }
 end
 
+function AssemblyMethods.Destroy(self: Assembly, reference: any )
+	self.Instructions[#self.Instructions + 1] = { "Destroy", reference }
+end
+
 function AssemblyMethods.SetAttribute(self: Assembly, reference: any, attribute: string, value: any)
 	self.Instructions[#self.Instructions + 1] = { "SetAttribute", reference, attribute, value }
 end
@@ -304,6 +308,8 @@ local function readInstruction(references: {}, instruction: any)
 		return value
 	elseif instruction[1] == "Clone" then
 		references[instruction[3]] = references[instruction[2]]:Clone()
+	elseif instruction[1] == "Destroy" then
+		references[instruction[2]]:Destroy()
 		return references[instruction[3]]
 	elseif instruction[1] == "GetReference" then
 		return references[instruction[2]]
