@@ -2,7 +2,7 @@
 	<Meta name="ExplicitAutoJoints">true</Meta>
 	<External>null</External>
 	<External>nil</External>
-	<Item class="ModuleScript" referent="RBXBC4F87C6937D4B939C06D7DBD6D1396E">
+	<Item class="ModuleScript" referent="RBXF1A76F74BDD540D7A907E1ED308DCBCC">
 		<Properties>
 			<Content name="LinkedSource"><null></null></Content>
 			<ProtectedString name="Source"><![CDATA[local Assembly = require("@self/Assembly")
@@ -23,7 +23,7 @@ function InstanceReplicator.fromAssembly(instructions: { any })
 end
 
 return InstanceReplicator]]></ProtectedString>
-			<string name="ScriptGuid">{0D79C1F1-E1D3-49D4-9BBF-BAA3EB2183D8}</string>
+			<string name="ScriptGuid">{7816ED87-D379-4A05-A10E-F66CAE1F8AAC}</string>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 			<bool name="DefinesCapabilities">false</bool>
@@ -31,7 +31,7 @@ return InstanceReplicator]]></ProtectedString>
 			<int64 name="SourceAssetId">-1</int64>
 			<BinaryString name="Tags"></BinaryString>
 		</Properties>
-		<Item class="ModuleScript" referent="RBX4E4D5870FE204B23B5AAA3399DFFC135">
+		<Item class="ModuleScript" referent="RBXC7D6C0C723B24568A71B44B7CA4A1299">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[local Assembly = {}
@@ -72,7 +72,7 @@ end
 function AssemblyMethods.GetProperty(self: Assembly, reference: any, property: string, assignReference: any)
 	local property = { "GetProperty", reference, property, assignReference }
 	self.Instructions[#self.Instructions + 1] = property
-	return assignReference
+	return assignReference or property
 end
 
 function AssemblyMethods.CallMethod<parameters>(self: Assembly, reference: any, method: string, ...: parameters)
@@ -86,7 +86,7 @@ end
 export type Assembly = typeof(Assembly.new())
 
 return Assembly]]></ProtectedString>
-				<string name="ScriptGuid">{6C01EE8D-7E3D-4DCF-93D1-F331175715CC}</string>
+				<string name="ScriptGuid">{6AC430C2-30A6-4834-BED2-FD3A44FACE41}</string>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
@@ -95,14 +95,19 @@ return Assembly]]></ProtectedString>
 				<BinaryString name="Tags"></BinaryString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX1C79289BDAF848F486380BBDE91BBFDE">
+		<Item class="ModuleScript" referent="RBX1E5E379F21D0419E8AB4BFB5E80A302C">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[local Replicator = {}
 
-local function getInstanceFromReference(path: string, parent: Instance?)
+local function getInstanceFromReference(references: {}, path: string, parent: (Instance | {  })?)
 	parent = parent or game
 	if not parent then return end
+	if typeof(parent) == "table" and parent.IsReference then
+		parent = references[parent[2]]
+	elseif typeof(parent) == "string" then
+		parent = references[parent]
+	end
 	
 	local instance = parent
 	for _, route in next, path:split("/") do
@@ -115,7 +120,7 @@ end
 
 local function readInstruction(references: {}, instruction: any)
 	if instruction[1] == "SetReference" then
-		references[instruction[2]] = getInstanceFromReference(instruction[3], instruction[4])
+		references[instruction[2]] = getInstanceFromReference(references, instruction[3], instruction[4])
 	elseif instruction[1] == "SetReferenceValue" then
 		references[instruction[2]] = instruction[3]
 	elseif instruction[1] == "SetProperty" then
@@ -123,7 +128,7 @@ local function readInstruction(references: {}, instruction: any)
 		references[instruction[2]][instruction[3]] = value
 	elseif instruction[1] == "GetProperty" then
 		local value = references[instruction[2]][instruction[3]]
-		references[instruction[4]] = value
+		if instruction[4] then references[instruction[4]] = value end
 		return value
 	elseif instruction[1] == "Clone" then
 		references[instruction[3]] = references[instruction[2]]:Clone()
@@ -147,7 +152,7 @@ Replicator.getInstanceFromReference = getInstanceFromReference
 Replicator.readInstruction = readInstruction
 
 return Replicator]]></ProtectedString>
-				<string name="ScriptGuid">{FFB20ED9-5F99-4656-8459-805CD5CA05C7}</string>
+				<string name="ScriptGuid">{6CC6E7B7-03E3-4332-B11C-38B6BFDFF475}</string>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
