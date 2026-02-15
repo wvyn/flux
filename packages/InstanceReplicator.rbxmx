@@ -18,7 +18,10 @@ function InstanceReplicator.fromAssembly(instructions: { any })
 	local references = {}
 	for i = 1, #instructions do
 		local instruction = instructions[i]
-		Replicator.readInstruction(references, instruction)
+		local response = Replicator.readInstruction(references, instruction)
+		if response == "__ASSEMBLYEXIT__" then
+			return
+		end
 	end
 end
 
@@ -62,6 +65,18 @@ end
 
 function AssemblyMethods.SetWaitingReference(self: Assembly, reference: any, pathReference: string, timeout: number, parentPath: (Instance | { string } | string)?)
 	self.Instructions[#self.Instructions + 1] = { "SetWaitingReference", reference, pathReference, parentPath, timeout }
+end
+
+function AssemblyMethods.SetNotReference(self: Assembly, reference: any, newReference: any)
+	self.Instructions[#self.Instructions + 1] = { "SetNotReference", reference, newReference }
+end
+
+function AssemblyMethods.CompareReferences(self: Assembly, referenceA: any, referenceB: any, resultReference: any)
+	self.Instructions[#self.Instructions + 1] = { "CompareReferences", referenceA, referenceB, resultReference }
+end
+
+function AssemblyMethods.ExitCondition(self: Assembly, reference: any)
+	self.Instructions[#self.Instructions + 1] = { "ExitCondition", reference }
 end
 
 function AssemblyMethods.GetReference(self: Assembly, reference: any)
@@ -141,6 +156,12 @@ local function readInstruction(references: {}, instruction: any)
 		references[instruction[2]] = getInstanceFromReference(references, instruction[3], instruction[4], true)
 	elseif instruction[1] == "SetWaitingReference" then
 		references[instruction[2]] = getInstanceFromReference(references, instruction[3], instruction[4], false, instruction[5])
+	elseif instruction[1] == "SetNotReference" then
+		local result = not references[instruction[2]]
+		references[instruction[3]] = result
+	elseif instruction[1] == "CompareReferences" then
+		local result = references[instruction[2]] == references[instruction[3]]
+		references[instruction[4]] = result
 	elseif instruction[1] == "SetProperty" then
 		local value = typeof(instruction[4]) == "table" and readInstruction(references, instruction[4]) or instruction[4]
 		references[instruction[2]][instruction[3]] = value
@@ -152,6 +173,10 @@ local function readInstruction(references: {}, instruction: any)
 		references[instruction[3]] = references[instruction[2]]:Clone()
 	elseif instruction[1] == "GetReference" then
 		return references[instruction[2]]
+	elseif instruction[1] == "ExitCondition" then
+		if references[instruction[2]] then
+			return "__ASSEMBLYEXIT__"
+		end
 	elseif instruction[1] == "CallMethod" then
 		local parameters = instruction[4]
 		for i, v in next, parameters do
