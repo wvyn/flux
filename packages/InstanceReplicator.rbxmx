@@ -67,6 +67,18 @@ function AssemblyMethods.SetWaitingReference(self: Assembly, reference: any, pat
 	self.Instructions[#self.Instructions + 1] = { "SetWaitingReference", reference, pathReference, parentPath, timeout }
 end
 
+function AssemblyMethods.SetReferenceToString(self: Assembly, reference: any, resultReference: any)
+	local instruction = { "SetReferenceToString", reference, resultReference }
+	if resultReference then self.Instructions[#self.Instructions + 1] = instruction end
+	return instruction
+end
+
+function AssemblyMethods.SetReferenceToNumber(self: Assembly, reference: any, resultReference: any)
+	local instruction = { "SetReferenceToNumber", reference, resultReference }
+	if resultReference then self.Instructions[#self.Instructions + 1] = instruction end
+	return instruction
+end
+
 function AssemblyMethods.SetNotReference(self: Assembly, reference: any, resultReference: any)
 	local instruction = { "SetNotReference", reference, resultReference }
 	if resultReference then self.Instructions[#self.Instructions + 1] = instruction end
@@ -192,6 +204,14 @@ local function readInstruction(references: {}, instruction: any)
 		references[instruction[2]] = getInstanceFromReference(references, instruction[3], instruction[4], false, instruction[5])
 	elseif instruction[1] == "SetNotReference" then
 		local result = not references[instruction[2]]
+		if instruction[3] then references[instruction[3]] = result end
+		return result
+	elseif instruction[1] == "SetReferenceToString" then
+		local result = tostring(references[instruction[2]])
+		if instruction[3] then references[instruction[3]] = result end
+		return result
+	elseif instruction[1] == "SetReferenceToNumber" then
+		local result = tonumber(references[instruction[2]])
 		if instruction[3] then references[instruction[3]] = result end
 		return result
 	elseif instruction[1] == "CompareReferences" then
