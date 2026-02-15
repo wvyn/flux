@@ -131,6 +131,10 @@ function AssemblyMethods.ExitCondition(self: Assembly, reference: any)
 	self.Instructions[#self.Instructions + 1] = { "ExitCondition", reference }
 end
 
+function AssemblyMethods.Exit(self: Assembly)
+	self.Instructions[#self.Instructions + 1] = { "Exit" }
+end
+
 function AssemblyMethods.GetReference(self: Assembly, reference: any)
 	local referenceInstruction = { "GetReference", reference, IsReference = true }
 	return referenceInstruction
@@ -262,8 +266,12 @@ local function readInstruction(references: {}, instruction: any)
 		return result
 	elseif instruction[1] == "SetInstructionConditionBlock" then
 		if references[instruction[2]] then
-			for _, blockInstructions in next, instruction[3] do
-				readInstruction(references, blockInstructions)
+			local instructions = instruction[3]
+			for i = 1, #instructions do
+				local response = readInstruction(references, instructions[i])
+				if response == "__ASSEMBLYEXIT__" then
+					return response
+				end
 			end
 		end
 	elseif instruction[1] == "SetProperty" then
@@ -307,6 +315,8 @@ local function readInstruction(references: {}, instruction: any)
 		if references[instruction[2]] then
 			return "__ASSEMBLYEXIT__"
 		end
+	elseif instruction[1] == "Exit" then
+		return "__ASSEMBLYEXIT__"
 	elseif instruction[1] == "CallMethod" then
 		local parameters = instruction[4]
 		for i, v in next, parameters do
