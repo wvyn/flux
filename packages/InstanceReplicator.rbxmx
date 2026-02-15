@@ -67,24 +67,34 @@ function AssemblyMethods.SetWaitingReference(self: Assembly, reference: any, pat
 	self.Instructions[#self.Instructions + 1] = { "SetWaitingReference", reference, pathReference, parentPath, timeout }
 end
 
-function AssemblyMethods.SetNotReference(self: Assembly, reference: any, newReference: any)
-	self.Instructions[#self.Instructions + 1] = { "SetNotReference", reference, newReference }
+function AssemblyMethods.SetNotReference(self: Assembly, reference: any, resultReference: any)
+	local instruction = { "SetNotReference", reference, resultReference }
+	if resultReference then self.Instructions[#self.Instructions + 1] = instruction end
+	return instruction
 end
 
 function AssemblyMethods.CompareReferences(self: Assembly, referenceA: any, referenceB: any, resultReference: any)
-	self.Instructions[#self.Instructions + 1] = { "CompareReferences", referenceA, referenceB, resultReference }
+	local instruction = { "CompareReferences", referenceA, referenceB, resultReference }
+	if resultReference then self.Instructions[#self.Instructions + 1] = instruction end
+	return instruction
 end
 
 function AssemblyMethods.CompareGreaterThanReferences(self: Assembly, referenceA: any, referenceB: any, resultReference: any)
-	self.Instructions[#self.Instructions + 1] = { "CompareGreaterThanReferences", referenceA, referenceB, resultReference }
+	local instruction = { "CompareGreaterThanReferences", referenceA, referenceB, resultReference }
+	if resultReference then self.Instructions[#self.Instructions + 1] = instruction end
+	return instruction
 end
 
 function AssemblyMethods.CompareLessThanReferences(self: Assembly, referenceA: any, referenceB: any, resultReference: any)
-	self.Instructions[#self.Instructions + 1] = { "CompareLessThanReferences", referenceA, referenceB, resultReference }
+	local instruction = { "CompareLessThanReferences", referenceA, referenceB, resultReference }
+	if resultReference then self.Instructions[#self.Instructions + 1] = instruction end
+	return instruction
 end
 
 function AssemblyMethods.SetReferenceStringConcat(self: Assembly, referenceA: any, referenceB: any, resultReference: any)
-	self.Instructions[#self.Instructions + 1] = { "SetReferenceStringConcat", referenceA, referenceB, resultReference }
+	local instruction = { "SetReferenceStringConcat", referenceA, referenceB, resultReference }
+	if resultReference then self.Instructions[#self.Instructions + 1] = instruction end
+	return instruction
 end
 
 function AssemblyMethods.SetInstructionConditionBlock(self: Assembly, conditionReference: any, compliedInstructions: { any })
@@ -182,23 +192,23 @@ local function readInstruction(references: {}, instruction: any)
 		references[instruction[2]] = getInstanceFromReference(references, instruction[3], instruction[4], false, instruction[5])
 	elseif instruction[1] == "SetNotReference" then
 		local result = not references[instruction[2]]
-		references[instruction[3]] = result
+		if instruction[3] then references[instruction[3]] = result end
 		return result
 	elseif instruction[1] == "CompareReferences" then
 		local result = references[instruction[2]] == references[instruction[3]]
-		references[instruction[4]] = result
+		if instruction[4] then references[instruction[4]] = result end
 		return result
 	elseif instruction[1] == "CompareGreaterThanReferences" then
 		local result = references[instruction[2]] > references[instruction[3]]
-		references[instruction[4]] = result
+		if instruction[4] then references[instruction[4]] = result end
 		return result
 	elseif instruction[1] == "CompareLessThanReferences" then
 		local result = references[instruction[2]] < references[instruction[3]]
-		references[instruction[4]] = result
+		if instruction[4] then references[instruction[4]] = result end
 		return result
 	elseif instruction[1] == "SetReferenceStringConcat" then
 		local result = (references[instruction[2]] or "")..(references[instruction[3]] or "")
-		references[instruction[4]] = result
+		if instruction[4] then references[instruction[4]] = result end
 		return result
 	elseif instruction[1] == "SetInstructionConditionBlock" then
 		if references[instruction[2]] then
