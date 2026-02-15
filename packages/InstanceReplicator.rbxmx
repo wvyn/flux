@@ -75,6 +75,14 @@ function AssemblyMethods.CompareReferences(self: Assembly, referenceA: any, refe
 	self.Instructions[#self.Instructions + 1] = { "CompareReferences", referenceA, referenceB, resultReference }
 end
 
+function AssemblyMethods.Print(self: Assembly, reference: any)
+	self.Instructions[#self.Instructions + 1] = { "Print", reference }
+end
+
+function AssemblyMethods.Warn(self: Assembly, reference: any)
+	self.Instructions[#self.Instructions + 1] = { "Warn", reference }
+end
+
 function AssemblyMethods.ExitCondition(self: Assembly, reference: any)
 	self.Instructions[#self.Instructions + 1] = { "ExitCondition", reference }
 end
@@ -165,6 +173,10 @@ local function readInstruction(references: {}, instruction: any)
 	elseif instruction[1] == "SetProperty" then
 		local value = typeof(instruction[4]) == "table" and readInstruction(references, instruction[4]) or instruction[4]
 		references[instruction[2]][instruction[3]] = value
+	elseif instruction[1] == "Print" then
+		print(references[instruction[2]])
+	elseif instruction[1] == "Warn" then
+		warn(references[instruction[2]])
 	elseif instruction[1] == "GetProperty" then
 		local value = references[instruction[2]][instruction[3]]
 		if instruction[4] then references[instruction[4]] = value end
