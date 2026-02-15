@@ -67,6 +67,12 @@ function AssemblyMethods.SetWaitingReference(self: Assembly, reference: any, pat
 	self.Instructions[#self.Instructions + 1] = { "SetWaitingReference", reference, pathReference, parentPath, timeout }
 end
 
+function AssemblyMethods.GetReferenceType(self: Assembly, reference: any, resultReference: any)
+	local instruction = { "GetReferenceType", reference, resultReference }
+	if resultReference then self.Instructions[#self.Instructions + 1] = instruction end
+	return instruction
+end
+
 function AssemblyMethods.SetReferenceToString(self: Assembly, reference: any, resultReference: any)
 	local instruction = { "SetReferenceToString", reference, resultReference }
 	if resultReference then self.Instructions[#self.Instructions + 1] = instruction end
@@ -134,14 +140,38 @@ function AssemblyMethods.SetProperty(self: Assembly, reference: any, property: s
 	self.Instructions[#self.Instructions + 1] = { "SetProperty", reference, property, value }
 end
 
+function AssemblyMethods.SetAttribute(self: Assembly, reference: any, attribute: string, value: any)
+	self.Instructions[#self.Instructions + 1] = { "SetAttribute", reference, attribute, value }
+end
+
+function AssemblyMethods.AddTag(self: Assembly, reference: any,  tag: any)
+	self.Instructions[#self.Instructions + 1] = { "AddTag", reference, tag }
+end
+
+function AssemblyMethods.RemoveTag(self: Assembly, reference: any,  tag: any)
+	self.Instructions[#self.Instructions + 1] = { "RemoveTag", reference, tag }
+end
+
 function AssemblyMethods.Add(self: Assembly, reference: any, value: any)
 	return { "Add", reference, value }
 end
 
 function AssemblyMethods.GetProperty(self: Assembly, reference: any, property: string, assignReference: any)
-	local property = { "GetProperty", reference, property, assignReference }
-	if assignReference then self.Instructions[#self.Instructions + 1] = property end
-	return property
+	local instruction = { "GetProperty", reference, property, assignReference }
+	if assignReference then self.Instructions[#self.Instructions + 1] = instruction end
+	return instruction
+end
+
+function AssemblyMethods.GetAttribute(self: Assembly, reference: any, attribute: string, assignReference: any)
+	local instruction = { "GetAttribute", reference, attribute, assignReference }
+	if assignReference then self.Instructions[#self.Instructions + 1] = instruction end
+	return instruction
+end
+
+function AssemblyMethods.HasTag(self: Assembly, reference: any, tag: string, assignReference: any)
+	local instruction = { "HasTag", reference, tag, assignReference }
+	if assignReference then self.Instructions[#self.Instructions + 1] = instruction end
+	return instruction
 end
 
 function AssemblyMethods.CallMethod<parameters>(self: Assembly, reference: any, method: string, ...: parameters)
@@ -239,6 +269,15 @@ local function readInstruction(references: {}, instruction: any)
 	elseif instruction[1] == "SetProperty" then
 		local value = typeof(instruction[4]) == "table" and readInstruction(references, instruction[4]) or instruction[4]
 		references[instruction[2]][instruction[3]] = value
+	elseif instruction[1] == "SetAttribute" then
+		local value = typeof(instruction[4]) == "table" and readInstruction(references, instruction[4]) or instruction[4]
+		references[instruction[2]]:SetAttribute(instruction[3], value)
+	elseif instruction[1] == "AddTag" then
+		local value = typeof(instruction[3]) == "table" and readInstruction(references, instruction[3]) or instruction[3]
+		references[instruction[2]]:AddTag(value)
+	elseif instruction[1] == "RemoveTag" then
+		local value = typeof(instruction[3]) == "table" and readInstruction(references, instruction[3]) or instruction[3]
+		references[instruction[2]]:AddTag(value)
 	elseif instruction[1] == "Print" then
 		print(references[instruction[2]])
 	elseif instruction[1] == "Warn" then
@@ -247,11 +286,23 @@ local function readInstruction(references: {}, instruction: any)
 		local value = references[instruction[2]][instruction[3]]
 		if instruction[4] then references[instruction[4]] = value end
 		return value
+	elseif instruction[1] == "GetAttribute" then
+		local value = references[instruction[2]]:GetAttribute(instruction[3])
+		if instruction[4] then references[instruction[4]] = value end
+		return value
+	elseif instruction[1] == "HasTag" then
+		local value = references[instruction[2]]:HasTag(instruction[3])
+		if instruction[4] then references[instruction[4]] = value end
+		return value
 	elseif instruction[1] == "Clone" then
 		references[instruction[3]] = references[instruction[2]]:Clone()
 		return references[instruction[3]]
 	elseif instruction[1] == "GetReference" then
 		return references[instruction[2]]
+	elseif instruction[1] == "GetReferenceType" then
+		local value = typeof(references[instruction[2]])
+		if instruction[3] then references[instruction[3]] = value end
+		return value
 	elseif instruction[1] == "ExitCondition" then
 		if references[instruction[2]] then
 			return "__ASSEMBLYEXIT__"
