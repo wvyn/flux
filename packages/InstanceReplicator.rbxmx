@@ -15,14 +15,7 @@ function InstanceReplicator.new()
 end
 
 function InstanceReplicator.fromAssembly(instructions: { any })
-	local references = {}
-	for i = 1, #instructions do
-		local instruction = instructions[i]
-		local response = Replicator.readInstruction(references, instruction)
-		if response == "__ASSEMBLYEXIT__" then
-			return
-		end
-	end
+	Replicator.runInstructions({}, instructions)
 end
 
 return InstanceReplicator]]></ProtectedString>
@@ -65,6 +58,22 @@ end
 
 function AssemblyMethods.SetWaitingReference(self: Assembly, reference: any, pathReference: string, timeout: number, parentPath: (Instance | { string } | string)?)
 	self.Instructions[#self.Instructions + 1] = { "SetWaitingReference", reference, pathReference, parentPath, timeout }
+end
+
+function AssemblyMethods.GetPropertyChangedSignal(self: Assembly, reference: any, property: string, compliedInstructions: {}, connectionReference: any)
+	self.Instructions[#self.Instructions + 1] = { "GetPropertyChangedSignal", reference, property, compliedInstructions, connectionReference }
+end
+
+function AssemblyMethods.GetAttributeChangedSignal(self: Assembly, reference: any, attribute: string, compliedInstructions: {}, connectionReference: any)
+	self.Instructions[#self.Instructions + 1] = { "GetAttributeChangedSignal", reference, attribute, compliedInstructions, connectionReference }
+end
+
+function AssemblyMethods.Wait(self: Assembly, timeOut: number)
+	self.Instructions[#self.Instructions + 1] = { "Wait", timeOut }
+end
+
+function AssemblyMethods.DisconnectConnection(self: Assembly, connectionReference: any)
+	self.Instructions[#self.Instructions + 1] = { "DisconnectConnection", connectionReference }
 end
 
 function AssemblyMethods.GetReferenceType(self: Assembly, reference: any, resultReference: any)
@@ -231,6 +240,16 @@ local function getInstanceFromReference(references: {}, path: string, parent: (I
 	return instance
 end
 
+local function runInstructions(references: {}, instructions: {})
+	for i = 1, #instructions do
+		local instruction = instructions[i]
+		local response = Replicator.readInstruction(references, instruction)
+		if response == "__ASSEMBLYEXIT__" then
+			return
+		end
+	end
+end
+
 local function readInstruction(references: {}, instruction: any)
 	if instruction[1] == "SetReference" then
 		references[instruction[2]] = getInstanceFromReference(references, instruction[3], instruction[4])
@@ -240,6 +259,22 @@ local function readInstruction(references: {}, instruction: any)
 		references[instruction[2]] = getInstanceFromReference(references, instruction[3], instruction[4], true)
 	elseif instruction[1] == "SetWaitingReference" then
 		references[instruction[2]] = getInstanceFromReference(references, instruction[3], instruction[4], false, instruction[5])
+	elseif instruction[1] == "GetPropertyChangedSignal" then
+		local connection = references[instruction[2]]:GetPropertyChangedSignal(instruction[3]):Connect(function()
+			return runInstructions(references, instruction[4])
+		end)
+		
+		if instruction[5] then references[instruction[5]] = connection end
+	elseif instruction[1] == "GetAttributeChangedSignal" then
+		local connection = references[instruction[2]]:GetAttributeChangedSignal(instruction[3]):Connect(function()
+			return runInstructions(references, instruction[4])
+		end)
+
+		if instruction[5] then references[instruction[5]] = connection end
+	elseif instruction[1] == "DisconnectConnection" then
+		references[instruction[2]]:Disconnect()
+	elseif instruction[1] == "Wait" then
+		task.wait(instruction[2])
 	elseif instruction[1] == "SetNotReference" then
 		local result = not references[instruction[2]]
 		if instruction[3] then references[instruction[3]] = result end
@@ -270,13 +305,7 @@ local function readInstruction(references: {}, instruction: any)
 		return result
 	elseif instruction[1] == "SetInstructionConditionBlock" then
 		if references[instruction[2]] then
-			local instructions = instruction[3]
-			for i = 1, #instructions do
-				local response = readInstruction(references, instructions[i])
-				if response == "__ASSEMBLYEXIT__" then
-					return response
-				end
-			end
+			return runInstructions(references, instruction[3])
 		end
 	elseif instruction[1] == "SetProperty" then
 		local value = typeof(instruction[4]) == "table" and readInstruction(references, instruction[4]) or instruction[4]
@@ -339,6 +368,7 @@ end
 
 Replicator.getInstanceFromReference = getInstanceFromReference
 Replicator.readInstruction = readInstruction
+Replicator.runInstructions = runInstructions
 
 return Replicator]]></ProtectedString>
 				<string name="ScriptGuid">{6CC6E7B7-03E3-4332-B11C-38B6BFDFF475}</string>
