@@ -48,7 +48,7 @@ function AssemblyMethods.Clone(self: Assembly, reference: any, assignReference: 
 	return assignReference
 end
 
-function AssemblyMethods.SetReference(self: Assembly, reference: any, pathReference: string, pathParent: (Instance | { string })?)
+function AssemblyMethods.SetReference(self: Assembly, reference: any, pathReference: string, pathParent: (Instance | { string } | string)?)
 	self.Instructions[#self.Instructions + 1] = { "SetReference", reference, pathReference, pathParent }
 end
 
