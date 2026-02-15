@@ -102,8 +102,8 @@ end
 
 function AssemblyMethods.GetProperty(self: Assembly, reference: any, property: string, assignReference: any)
 	local property = { "GetProperty", reference, property, assignReference }
-	self.Instructions[#self.Instructions + 1] = property
-	return assignReference or property
+	if assignReference then self.Instructions[#self.Instructions + 1] = property end
+	return property
 end
 
 function AssemblyMethods.CallMethod<parameters>(self: Assembly, reference: any, method: string, ...: parameters)
