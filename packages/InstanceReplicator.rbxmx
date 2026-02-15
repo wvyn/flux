@@ -56,6 +56,14 @@ function AssemblyMethods.SetReferenceValue(self: Assembly, reference: any, value
 	self.Instructions[#self.Instructions + 1] = { "SetReferenceValue", reference, value }
 end
 
+function AssemblyMethods.SetDeepFindReference(self: Assembly, reference: any, deepFind: string, parentPath: (Instance | { string } | string)?)
+	self.Instructions[#self.Instructions + 1] = { "SetDeepFindReference", reference, deepFind, parentPath }
+end
+
+function AssemblyMethods.SetWaitingReference(self: Assembly, reference: any, pathReference: string, timeout: number, parentPath: (Instance | { string } | string)?)
+	self.Instructions[#self.Instructions + 1] = { "SetWaitingReference", reference, pathReference, parentPath, timeout }
+end
+
 function AssemblyMethods.GetReference(self: Assembly, reference: any)
 	local referenceInstruction = { "GetReference", reference, IsReference = true }
 	return referenceInstruction
@@ -100,7 +108,7 @@ return Assembly]]></ProtectedString>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[local Replicator = {}
 
-local function getInstanceFromReference(references: {}, path: string, parent: (Instance | {  })?)
+local function getInstanceFromReference(references: {}, path: string, parent: (Instance | {  })?, deepEnd: boolean?, waitTimeout: number?)
 	parent = parent or game
 	if not parent then return end
 	if typeof(parent) == "table" and parent.IsReference then
@@ -110,8 +118,14 @@ local function getInstanceFromReference(references: {}, path: string, parent: (I
 	end
 	
 	local instance = parent
-	for _, route in next, path:split("/") do
-		instance = instance:FindFirstChild(route)
+	if not instance then return end
+	local paths = path:split("/")
+	for index, route in next, paths do
+		if waitTimeout then
+			instance = instance:WaitForChild(route, waitTimeout)
+		else
+			instance = instance:FindFirstChild(route, deepEnd and index == #paths)
+		end
 		if not instance then break end
 	end
 	
@@ -123,6 +137,10 @@ local function readInstruction(references: {}, instruction: any)
 		references[instruction[2]] = getInstanceFromReference(references, instruction[3], instruction[4])
 	elseif instruction[1] == "SetReferenceValue" then
 		references[instruction[2]] = instruction[3]
+	elseif instruction[1] == "SetDeepFindReference" then
+		references[instruction[2]] = getInstanceFromReference(references, instruction[3], instruction[4], true)
+	elseif instruction[1] == "SetWaitingReference" then
+		references[instruction[2]] = getInstanceFromReference(references, instruction[3], instruction[4], false, instruction[5])
 	elseif instruction[1] == "SetProperty" then
 		local value = typeof(instruction[4]) == "table" and readInstruction(references, instruction[4]) or instruction[4]
 		references[instruction[2]][instruction[3]] = value
