@@ -18,7 +18,26 @@ function RigReflector.new(character: Instance, sourceRig: Instance)
 	reflector.Character = character
 	reflector.Rig = sourceRig
 
+	reflector._connections = {}
+	reflector._propertyConnections = {}
+
 	return reflector
+end
+
+function RigReflectorMethods.Destroy(self: RigReflector)
+	for _, connection in next, self._connections do
+		connection:Disconnect()
+	end
+
+	for _, connection in next, self._propertyConnections do
+		connection:Disconnect()
+	end
+	
+	for i in next, self do
+		self[i] = nil
+	end
+
+	setmetatable(self, {})
 end
 
 function RigReflectorMethods.Start(self: RigReflector)
@@ -26,12 +45,33 @@ function RigReflectorMethods.Start(self: RigReflector)
 		task.spawn(self._addAsset, self, descendant)
 	end
 
-	self.Character.DescendantAdded:Connect(function(descendant)
+	self._connections[#self._connections + 1] = self.Character.DescendantAdded:Connect(function(descendant)
 		self:_addAsset(descendant)
 	end)
 
-	self.Character.DescendantRemoving:Connect(function(descendant)
+
+	self._connections[#self._connections + 1] = self.Character.DescendantRemoving:Connect(function(descendant)
 		self:_removeAsset(descendant)
+	end)
+
+	self._connections[#self._connections + 1] = self.Rig.Destroying:Connect(function()
+		self:Destroy()
+	end)
+
+	self._connections[#self._connections + 1] = self.Character.Destroying:Connect(function()
+		self:Destroy()
+	end)
+
+	self._connections[#self._connections + 1] = self.Character:GetPropertyChangedSignal("Parent"):Connect(function()
+		if not self.Character.Parent then
+			self:Destroy()
+		end
+	end)
+
+	self._connections[#self._connections + 1] = self.Rig:GetPropertyChangedSignal("Parent"):Connect(function()
+		if not self.Rig.Parent then
+			self:Destroy()
+		end
 	end)
 end
 
@@ -66,7 +106,7 @@ function RigReflectorMethods._getRigEquivalent(self: RigReflector, sourcePart: I
 
 	if parentPath[#parentPath] == self.Character then
 		local rigParent = self.Rig
-		
+
 		for i = #parentPath - 1, 1, -1 do
 			if not rigParent then break end
 			if yield then
@@ -94,9 +134,12 @@ function RigReflectorMethods._syncProperty(self: RigReflector, source: Instance,
 end
 
 function RigReflectorMethods._connectProperty(self, source: Instance, rigInstance: Instance, propertyName: string)
-	source:GetPropertyChangedSignal(propertyName):Connect(function()
+	local connection
+	connection = source:GetPropertyChangedSignal(propertyName):Connect(function()
 		self:_syncProperty(source, rigInstance, propertyName)
 	end)
+
+	table.insert(self._propertyConnections, connection)
 end
 
 function RigReflectorMethods._addAsset(self, asset: Instance)
@@ -126,7 +169,6 @@ function RigReflectorMethods._addAsset(self, asset: Instance)
 	local copy = rigParent:FindFirstChild(asset.Name)
 	if not copy then
 		copy = Instance.fromExisting(asset)
-		copy.Parent = rigParent
 	end
 
 	local reflectionProperties = self:_getProperties(asset.ClassName)
@@ -146,6 +188,8 @@ function RigReflectorMethods._addAsset(self, asset: Instance)
 			end)
 		end
 	end
+	
+	copy.Parent = rigParent
 end
 
 function RigReflectorMethods._removeAsset(self: RigReflector, asset: Instance)
