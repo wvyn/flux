@@ -1,0 +1,168 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+	<Meta name="ExplicitAutoJoints">true</Meta>
+	<External>null</External>
+	<External>nil</External>
+	<Item class="ModuleScript" referent="RBXEA65453056D14FF792F0922D734831DB">
+		<Properties>
+			<Content name="LinkedSource"><null></null></Content>
+			<ProtectedString name="Source"><![CDATA[local reflectionService = game:GetService("ReflectionService")
+
+local RigReflector = {}
+local RigReflectorMethods = {}
+
+function RigReflector.new(character: Instance, sourceRig: Instance)
+	local reflector = setmetatable({}, { __index = RigReflectorMethods })
+
+	reflector.Character = character
+	reflector.Rig = sourceRig
+	reflector._propertyCache = {}
+
+	return reflector
+end
+
+function RigReflectorMethods.Start(self: RigReflector)
+	for _, child in next, self.Character:GetChildren() do
+		task.spawn(self._addAsset, self, child)
+	end
+
+	self.Character.DescendantAdded:Connect(function(v)
+		self:_addAsset(v)
+	end)
+
+	self.Character.DescendantRemoving:Connect(function(v)
+		self:_removeAsset(v)
+	end)
+end
+
+function RigReflectorMethods._getProperties(self: RigReflector, className: string)
+	local cached = self._propertyCache[className]
+	if cached ~= nil then
+		return cached
+	end
+
+	local props = reflectionService:GetPropertiesOfClass(className)
+	self._propertyCache[className] = props
+
+	return props
+end
+
+function RigReflectorMethods._getRigEquivalent(self: RigReflector, v: Instance)
+	local parentPath = { v }
+	local parentLocation = v
+
+	repeat
+		if parentLocation == self.Character or not parentLocation then
+			break
+		end
+
+		parentPath[#parentPath + 1] = parentLocation.Parent
+		parentLocation = parentLocation.Parent
+	until parentLocation == self.Character or parentLocation == game
+
+	if #parentPath == 1 and self.Rig:FindFirstChild(v.Name) then
+		parentPath[#parentPath + 1] = self.Character
+	end
+
+	if parentPath[#parentPath] == self.Character then
+		local rigParent = self.Rig
+
+		for i = #parentPath - 1, 1, -1 do
+			if not rigParent then
+				break
+			end
+
+			rigParent = rigParent:FindFirstChild(parentPath[i].Name)
+		end
+
+		return rigParent
+	end
+end
+
+function RigReflectorMethods._syncProperty(self: RigReflector, source, target, propertyName)
+	local value = source[propertyName]
+	if typeof(value) == "function" then return end
+	if propertyName == "Capabilities" then return end
+	if propertyName == "Sandboxed" then return end
+
+	if typeof(value) == "Instance" then
+		value = self:_getRigEquivalent(value)
+	end
+
+	target[propertyName] = value
+end
+
+function RigReflectorMethods._connectProperty(self: RigReflector, source, target, propertyName)
+	source:GetPropertyChangedSignal(propertyName):Connect(function()
+		self:_syncProperty(source, target, propertyName)
+	end)
+end
+
+function RigReflectorMethods._addAsset(self: RigReflector, v: Instance)
+	if v:IsA("BaseScript") then return end
+
+	local parentPath = {}
+	local parentLocation = v
+
+	repeat
+		parentPath[#parentPath + 1] = parentLocation.Parent
+		parentLocation = parentLocation.Parent
+	until parentLocation == self.Character or parentLocation == game
+
+	if parentPath[#parentPath] ~= self.Character then
+		return
+	end
+
+	local rigParent = self.Rig
+	for i = #parentPath - 1, 1, -1 do
+		if not rigParent then break end
+		rigParent = rigParent:FindFirstChild(parentPath[i].Name)
+	end
+
+	if not rigParent then return end
+
+	local reflectionProperties = self:_getProperties(v.ClassName)
+
+	local copy = rigParent:FindFirstChild(v.Name)
+	if not copy then
+		copy = Instance.fromExisting(v)
+		copy.Parent = rigParent
+	end
+
+	if not reflectionProperties then
+		return
+	end
+
+	for _, reflectionProperty in next, reflectionProperties do
+		if not (reflectionProperty.Permits.Write and reflectionProperty.Permits.Read) then
+			continue
+		end
+
+		if reflectionProperty.Display.DeprecationMessage then
+			continue
+		end
+
+		self:_syncProperty(v, copy, reflectionProperty.Name)
+		self:_connectProperty(v, copy, reflectionProperty.Name)
+	end
+end
+
+function RigReflectorMethods._removeAsset(self: RigReflector, v: Instance)
+	local instance = self:_getRigEquivalent(v)
+	if instance then
+		instance:Destroy()
+	end
+end
+
+export type RigReflector = typeof(RigReflector.new(nil :: any, nil :: any))
+
+return RigReflector]]></ProtectedString>
+			<string name="ScriptGuid">{15F4C90E-973C-4EF7-BF00-BA11811B862E}</string>
+			<BinaryString name="AttributesSerialize"></BinaryString>
+			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+			<bool name="DefinesCapabilities">false</bool>
+			<string name="Name">RigReflector</string>
+			<int64 name="SourceAssetId">-1</int64>
+			<BinaryString name="Tags"></BinaryString>
+		</Properties>
+	</Item>
+</roblox>
