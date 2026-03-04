@@ -12,11 +12,19 @@ local RigReflectorMethods = {}
 
 local propertyCache = {}
 
-function RigReflector.new(character: Instance, sourceRig: Instance)
+function RigReflector.new(character: Instance, sourceRig: Instance, ignore: { Properties: { string }?, Classes: { string }? }?)
 	local reflector = setmetatable({}, { __index = RigReflectorMethods })
 
 	reflector.Character = character
 	reflector.Rig = sourceRig
+	
+	reflector.Ignore = ignore or {
+		Properties = {} :: { string }?,
+		Classes = {} :: { string }?
+	}
+	
+	reflector.Ignore.Properties = reflector.Ignore.Properties or {}
+	reflector.Classes.Properties = reflector.Classes.Properties or {}
 
 	reflector._connections = {}
 	reflector._propertyConnections = {}
@@ -125,6 +133,10 @@ function RigReflectorMethods._syncProperty(self: RigReflector, source: Instance,
 	if typeof(value) == "function" then return end
 	if propertyName == "Capabilities" then return end
 	if propertyName == "Sandboxed" then return end
+	
+	for _, ignoreProperty in next, self.Ignore.Properties do
+		if ignoreProperty == propertyName then return end
+	end
 
 	if typeof(value) == "Instance" then
 		value = self:_getRigEquivalent(value, 3)
@@ -133,7 +145,7 @@ function RigReflectorMethods._syncProperty(self: RigReflector, source: Instance,
 	rigInstance[propertyName] = value
 end
 
-function RigReflectorMethods._connectProperty(self, source: Instance, rigInstance: Instance, propertyName: string)
+function RigReflectorMethods._connectProperty(self: RigReflector, source: Instance, rigInstance: Instance, propertyName: string)
 	local connection
 	connection = source:GetPropertyChangedSignal(propertyName):Connect(function()
 		self:_syncProperty(source, rigInstance, propertyName)
@@ -142,9 +154,12 @@ function RigReflectorMethods._connectProperty(self, source: Instance, rigInstanc
 	table.insert(self._propertyConnections, connection)
 end
 
-function RigReflectorMethods._addAsset(self, asset: Instance)
-	if asset:IsA("BaseScript") then return end
+function RigReflectorMethods._addAsset(self: RigReflector, asset: Instance)
 	if asset:IsA("Status") then return end
+	
+	for _, class in next, self.Ignore.Classes do
+		if asset:IsA(class) then return end
+	end
 
 	local parentPath = {}
 	local parentLocation = asset
