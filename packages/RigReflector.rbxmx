@@ -2,7 +2,7 @@
 	<Meta name="ExplicitAutoJoints">true</Meta>
 	<External>null</External>
 	<External>nil</External>
-	<Item class="ModuleScript" referent="RBXEA65453056D14FF792F0922D734831DB">
+	<Item class="ModuleScript" referent="RBXC23E8A2272C74F67AA367219388A4B27">
 		<Properties>
 			<Content name="LinkedSource"><null></null></Content>
 			<ProtectedString name="Source"><![CDATA[local reflectionService = game:GetService("ReflectionService")
@@ -150,6 +150,7 @@ function RigReflectorMethods._addAsset(self, asset: Instance)
 	local parentLocation = asset
 
 	repeat
+		if not parentLocation then break end
 		parentPath[#parentPath + 1] = parentLocation.Parent
 		parentLocation = parentLocation.Parent
 	until parentLocation == self.Character or parentLocation == game
