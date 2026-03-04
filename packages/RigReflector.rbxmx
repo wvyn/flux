@@ -24,7 +24,7 @@ function RigReflector.new(character: Instance, sourceRig: Instance, ignore: { Pr
 	}
 	
 	reflector.Ignore.Properties = reflector.Ignore.Properties or {}
-	reflector.Classes.Properties = reflector.Classes.Properties or {}
+	reflector.Ignore.Classes = reflector.Ignore.Classes or {}
 
 	reflector._connections = {}
 	reflector._propertyConnections = {}
