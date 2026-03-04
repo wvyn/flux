@@ -22,16 +22,16 @@ function RigReflector.new(character: Instance, sourceRig: Instance)
 end
 
 function RigReflectorMethods.Start(self: RigReflector)
-	for _, child in next, self.Character:GetChildren() do
-		task.spawn(self._addAsset, self, child)
+	for _, descendant in next, self.Character:GetDescendants() do
+		task.spawn(self._addAsset, self, descendant)
 	end
 
-	self.Character.DescendantAdded:Connect(function(v)
-		self:_addAsset(v)
+	self.Character.DescendantAdded:Connect(function(descendant)
+		self:_addAsset(descendant)
 	end)
 
-	self.Character.DescendantRemoving:Connect(function(v)
-		self:_removeAsset(v)
+	self.Character.DescendantRemoving:Connect(function(descendant)
+		self:_removeAsset(descendant)
 	end)
 end
 
@@ -47,9 +47,9 @@ function RigReflectorMethods._getProperties(self: RigReflector, className: strin
 	return props
 end
 
-function RigReflectorMethods._getRigEquivalent(self: RigReflector, v: Instance, yield: number?)
-	local parentPath = { v }
-	local parentLocation = v
+function RigReflectorMethods._getRigEquivalent(self: RigReflector, sourcePart: Instance, yield: number?)
+	local parentPath = { sourcePart }
+	local parentLocation = sourcePart
 
 	repeat
 		if parentLocation == self.Character or not parentLocation then
@@ -60,7 +60,7 @@ function RigReflectorMethods._getRigEquivalent(self: RigReflector, v: Instance, 
 		parentLocation = parentLocation.Parent
 	until parentLocation == self.Character or parentLocation == game
 
-	if #parentPath == 1 and self.Rig:FindFirstChild(v.Name) then
+	if #parentPath == 1 and self.Rig:FindFirstChild(sourcePart.Name) then
 		parentPath[#parentPath + 1] = self.Character
 	end
 
@@ -80,7 +80,7 @@ function RigReflectorMethods._getRigEquivalent(self: RigReflector, v: Instance, 
 	end
 end
 
-function RigReflectorMethods._syncProperty(self: RigReflector, source: Instance, target: Instance, propertyName: string)
+function RigReflectorMethods._syncProperty(self: RigReflector, source: Instance, rigInstance: Instance, propertyName: string)
 	local value = source[propertyName]
 	if typeof(value) == "function" then return end
 	if propertyName == "Capabilities" then return end
@@ -90,20 +90,20 @@ function RigReflectorMethods._syncProperty(self: RigReflector, source: Instance,
 		value = self:_getRigEquivalent(value, 3)
 	end
 
-	target[propertyName] = value
+	rigInstance[propertyName] = value
 end
 
-function RigReflectorMethods._connectProperty(self, source: Instance, target: Instance, propertyName: string)
+function RigReflectorMethods._connectProperty(self, source: Instance, rigInstance: Instance, propertyName: string)
 	source:GetPropertyChangedSignal(propertyName):Connect(function()
-		self:_syncProperty(source, target, propertyName)
+		self:_syncProperty(source, rigInstance, propertyName)
 	end)
 end
 
-function RigReflectorMethods._addAsset(self, v: Instance)
-	if v:IsA("BaseScript") then return end
+function RigReflectorMethods._addAsset(self, asset: Instance)
+	if asset:IsA("BaseScript") then return end
 
 	local parentPath = {}
-	local parentLocation = v
+	local parentLocation = asset
 
 	repeat
 		parentPath[#parentPath + 1] = parentLocation.Parent
@@ -122,13 +122,13 @@ function RigReflectorMethods._addAsset(self, v: Instance)
 
 	if not rigParent then return end
 
-	local copy = rigParent:FindFirstChild(v.Name)
+	local copy = rigParent:FindFirstChild(asset.Name)
 	if not copy then
-		copy = Instance.fromExisting(v)
+		copy = Instance.fromExisting(asset)
 		copy.Parent = rigParent
 	end
 
-	local reflectionProperties = self:_getProperties(v.ClassName)
+	local reflectionProperties = self:_getProperties(asset.ClassName)
 	if reflectionProperties then
 		for _, reflectionProperty in next, reflectionProperties do
 			task.spawn(function()
@@ -140,15 +140,15 @@ function RigReflectorMethods._addAsset(self, v: Instance)
 					return
 				end
 
-				self:_syncProperty(v, copy, reflectionProperty.Name)
-				self:_connectProperty(v, copy, reflectionProperty.Name)
+				self:_syncProperty(asset, copy, reflectionProperty.Name)
+				self:_connectProperty(asset, copy, reflectionProperty.Name)
 			end)
 		end
 	end
 end
 
-function RigReflectorMethods._removeAsset(self: RigReflector, v: Instance)
-	local instance = self:_getRigEquivalent(v)
+function RigReflectorMethods._removeAsset(self: RigReflector, asset: Instance)
+	local instance = self:_getRigEquivalent(asset)
 	if instance then
 		instance:Destroy()
 	end
