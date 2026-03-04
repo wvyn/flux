@@ -78,20 +78,20 @@ function RigReflectorMethods._getRigEquivalent(self: RigReflector, v: Instance)
 	end
 end
 
-function RigReflectorMethods._syncProperty(self: RigReflector, source, target, propertyName)
+function RigReflectorMethods._syncProperty(self: RigReflector, source: Instance, target: Instance, propertyName: string)
 	local value = source[propertyName]
 	if typeof(value) == "function" then return end
 	if propertyName == "Capabilities" then return end
 	if propertyName == "Sandboxed" then return end
 
-	if typeof(value) == "Instance" then
+	if typeof(value) == "Instance" and value:IsDescendantOf(source) then
 		value = self:_getRigEquivalent(value)
 	end
 
 	target[propertyName] = value
 end
 
-function RigReflectorMethods._connectProperty(self: RigReflector, source, target, propertyName)
+function RigReflectorMethods._connectProperty(self: RigReflector, source: Instance, target: Instance, propertyName: string)
 	source:GetPropertyChangedSignal(propertyName):Connect(function()
 		self:_syncProperty(source, target, propertyName)
 	end)
