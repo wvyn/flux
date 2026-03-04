@@ -10,12 +10,13 @@
 local RigReflector = {}
 local RigReflectorMethods = {}
 
+local propertyCache = {}
+
 function RigReflector.new(character: Instance, sourceRig: Instance)
 	local reflector = setmetatable({}, { __index = RigReflectorMethods })
 
 	reflector.Character = character
 	reflector.Rig = sourceRig
-	reflector._propertyCache = {}
 
 	return reflector
 end
@@ -34,14 +35,14 @@ function RigReflectorMethods.Start(self: RigReflector)
 	end)
 end
 
-function RigReflectorMethods._getProperties(self: RigReflector, className: string)
-	local cached = self._propertyCache[className]
+function RigReflectorMethods._getProperties(self: RigReflector, className: string): ReflectedProperties
+	local cached = propertyCache[className]
 	if cached ~= nil then
 		return cached
 	end
 
 	local props = reflectionService:GetPropertiesOfClass(className)
-	self._propertyCache[className] = props
+	propertyCache[className] = props
 
 	return props
 end
@@ -67,10 +68,7 @@ function RigReflectorMethods._getRigEquivalent(self: RigReflector, v: Instance)
 		local rigParent = self.Rig
 
 		for i = #parentPath - 1, 1, -1 do
-			if not rigParent then
-				break
-			end
-
+			if not rigParent then break end
 			rigParent = rigParent:FindFirstChild(parentPath[i].Name)
 		end
 
@@ -84,20 +82,20 @@ function RigReflectorMethods._syncProperty(self: RigReflector, source: Instance,
 	if propertyName == "Capabilities" then return end
 	if propertyName == "Sandboxed" then return end
 
-	if typeof(value) == "Instance" and value:IsDescendantOf(source) then
+	if typeof(value) == "Instance" then
 		value = self:_getRigEquivalent(value)
 	end
 
 	target[propertyName] = value
 end
 
-function RigReflectorMethods._connectProperty(self: RigReflector, source: Instance, target: Instance, propertyName: string)
+function RigReflectorMethods._connectProperty(self, source: Instance, target: Instance, propertyName: string)
 	source:GetPropertyChangedSignal(propertyName):Connect(function()
 		self:_syncProperty(source, target, propertyName)
 	end)
 end
 
-function RigReflectorMethods._addAsset(self: RigReflector, v: Instance)
+function RigReflectorMethods._addAsset(self, v: Instance)
 	if v:IsA("BaseScript") then return end
 
 	local parentPath = {}
@@ -120,29 +118,26 @@ function RigReflectorMethods._addAsset(self: RigReflector, v: Instance)
 
 	if not rigParent then return end
 
-	local reflectionProperties = self:_getProperties(v.ClassName)
-
 	local copy = rigParent:FindFirstChild(v.Name)
 	if not copy then
 		copy = Instance.fromExisting(v)
 		copy.Parent = rigParent
 	end
 
-	if not reflectionProperties then
-		return
-	end
+	local reflectionProperties = self:_getProperties(v.ClassName)
+	if reflectionProperties then
+		for _, reflectionProperty in next, reflectionProperties do
+			if not (reflectionProperty.Permits.Write and reflectionProperty.Permits.Read) then
+				continue
+			end
 
-	for _, reflectionProperty in next, reflectionProperties do
-		if not (reflectionProperty.Permits.Write and reflectionProperty.Permits.Read) then
-			continue
+			if reflectionProperty.Display and reflectionProperty.Display.DeprecationMessage then
+				continue
+			end
+
+			self:_syncProperty(v, copy, reflectionProperty.Name)
+			self:_connectProperty(v, copy, reflectionProperty.Name)
 		end
-
-		if reflectionProperty.Display.DeprecationMessage then
-			continue
-		end
-
-		self:_syncProperty(v, copy, reflectionProperty.Name)
-		self:_connectProperty(v, copy, reflectionProperty.Name)
 	end
 end
 
