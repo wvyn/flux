@@ -101,6 +101,7 @@ end
 
 function RigReflectorMethods._addAsset(self, asset: Instance)
 	if asset:IsA("BaseScript") then return end
+	if asset:IsA("Status") then return end
 
 	local parentPath = {}
 	local parentLocation = asset
