@@ -47,7 +47,7 @@ function RigReflectorMethods._getProperties(self: RigReflector, className: strin
 	return props
 end
 
-function RigReflectorMethods._getRigEquivalent(self: RigReflector, v: Instance)
+function RigReflectorMethods._getRigEquivalent(self: RigReflector, v: Instance, yield: number?)
 	local parentPath = { v }
 	local parentLocation = v
 
@@ -66,10 +66,14 @@ function RigReflectorMethods._getRigEquivalent(self: RigReflector, v: Instance)
 
 	if parentPath[#parentPath] == self.Character then
 		local rigParent = self.Rig
-
+		
 		for i = #parentPath - 1, 1, -1 do
 			if not rigParent then break end
-			rigParent = rigParent:FindFirstChild(parentPath[i].Name)
+			if yield then
+				rigParent = rigParent:WaitForChild(parentPath[i].Name, yield)
+			else
+				rigParent = rigParent:FindFirstChild(parentPath[i].Name)
+			end
 		end
 
 		return rigParent
@@ -83,7 +87,7 @@ function RigReflectorMethods._syncProperty(self: RigReflector, source: Instance,
 	if propertyName == "Sandboxed" then return end
 
 	if typeof(value) == "Instance" then
-		value = self:_getRigEquivalent(value)
+		value = self:_getRigEquivalent(value, 3)
 	end
 
 	target[propertyName] = value
@@ -127,16 +131,18 @@ function RigReflectorMethods._addAsset(self, v: Instance)
 	local reflectionProperties = self:_getProperties(v.ClassName)
 	if reflectionProperties then
 		for _, reflectionProperty in next, reflectionProperties do
-			if not (reflectionProperty.Permits.Write and reflectionProperty.Permits.Read) then
-				continue
-			end
+			task.spawn(function()
+				if not (reflectionProperty.Permits.Write and reflectionProperty.Permits.Read) then
+					return
+				end
 
-			if reflectionProperty.Display and reflectionProperty.Display.DeprecationMessage then
-				continue
-			end
+				if reflectionProperty.Display and reflectionProperty.Display.DeprecationMessage then
+					return
+				end
 
-			self:_syncProperty(v, copy, reflectionProperty.Name)
-			self:_connectProperty(v, copy, reflectionProperty.Name)
+				self:_syncProperty(v, copy, reflectionProperty.Name)
+				self:_connectProperty(v, copy, reflectionProperty.Name)
+			end)
 		end
 	end
 end
