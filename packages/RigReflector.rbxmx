@@ -138,7 +138,7 @@ function RigReflectorMethods._syncProperty(self: RigReflector, source: Instance,
 		if ignoreProperty == propertyName then return end
 	end
 
-	if typeof(value) == "Instance" then
+	if typeof(value) == "Instance" and value:IsDescendantOf(self.Character) then
 		value = self:_getRigEquivalent(value, 3)
 	end
 
