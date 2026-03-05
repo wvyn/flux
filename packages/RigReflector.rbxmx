@@ -135,14 +135,7 @@ end
 
 function RigReflectorMethods._syncProperty(self: RigReflector, source: Instance, rigInstance: Instance, propertyName: string)
 	local value = source[propertyName]
-	if typeof(value) == "function" then return end
-	if propertyName == "Capabilities" then return end
-	if propertyName == "Sandboxed" then return end
 	
-	for _, ignoreProperty in next, self.Ignore.Properties do
-		if ignoreProperty == propertyName then return end
-	end
-
 	if typeof(value) == "Instance" and value:IsDescendantOf(self.Character) then
 		value = self:_getRigEquivalent(value, 3)
 	end
@@ -207,6 +200,16 @@ function RigReflectorMethods._addAsset(self: RigReflector, asset: Instance)
 
 				if reflectionProperty.Display and reflectionProperty.Display.DeprecationMessage then
 					return
+				end
+
+				if reflectionProperty.Name == "Capabilities" then return end
+				if reflectionProperty.Name == "Sandboxed" then return end
+
+				local value = asset[reflectionProperty.Name]
+				if typeof(value) == "function" then return end
+
+				for _, ignoreProperty in next, self.Ignore.Properties do
+					if ignoreProperty == reflectionProperty.Name then return end
 				end
 
 				self:_syncProperty(asset, copy, reflectionProperty.Name)
