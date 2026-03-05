@@ -222,8 +222,16 @@ function RigReflectorMethods._addAsset(self: RigReflector, asset: Instance)
 				local value = asset[reflectionProperty.Name]
 				if typeof(value) == "function" then return end
 
-				for _, ignoreProperty in next, self.Ignore.Properties do
-					if ignoreProperty == reflectionProperty.Name then return end
+				for class, ignoreProperty in next, self.Ignore.Properties do
+					if typeof(class) == "string" and typeof(ignoreProperty) == "table" then
+						if asset:IsA(class) then
+							for _, property in next, ignoreProperty do
+								if reflectionProperty.Name == property then return end
+							end
+						end
+					else
+						if ignoreProperty == reflectionProperty.Name then return end
+					end
 				end
 
 				self:_syncProperty(asset, copy, reflectionProperty.Name)
