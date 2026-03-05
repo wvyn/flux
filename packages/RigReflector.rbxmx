@@ -14,7 +14,14 @@ local RigReflectorMethods = {}
 
 local propertyCache = {}
 
-function RigReflector.new(character: Instance, sourceRig: Instance, ignore: { Properties: { string }?, Classes: { string }? }?)
+function RigReflector.new(
+	character: Instance,
+	sourceRig: Instance,
+	ignore: {
+		Properties: { string }?,
+		Classes: { string }?,
+		Names: { string }? }?
+)
 	local reflector = setmetatable({}, { __index = RigReflectorMethods })
 
 	reflector.Character = character
@@ -22,7 +29,8 @@ function RigReflector.new(character: Instance, sourceRig: Instance, ignore: { Pr
 	
 	reflector.Ignore = ignore or {
 		Properties = {} :: { string }?,
-		Classes = {} :: { string }?
+		Classes = {} :: { string }?,
+		Names = {} :: { string }?
 	}
 	
 	reflector.ProcessAdded = Signal.new()
@@ -30,6 +38,7 @@ function RigReflector.new(character: Instance, sourceRig: Instance, ignore: { Pr
 	
 	reflector.Ignore.Properties = reflector.Ignore.Properties or {}
 	reflector.Ignore.Classes = reflector.Ignore.Classes or {}
+	reflector.Ignore.Names = reflector.Ignore.Names or {}
 
 	reflector._connections = {}
 	reflector._propertyConnections = {}
@@ -158,6 +167,10 @@ function RigReflectorMethods._addAsset(self: RigReflector, asset: Instance)
 	
 	for _, class in next, self.Ignore.Classes do
 		if asset:IsA(class) then return end
+	end
+	
+	for _, name in next, self.Ignore.Names do
+		if asset.Name == name then return end
 	end
 	
 	local responses = self.ProcessAdded:Invoke(asset)
