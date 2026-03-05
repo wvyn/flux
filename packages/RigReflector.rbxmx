@@ -2,7 +2,7 @@
 	<Meta name="ExplicitAutoJoints">true</Meta>
 	<External>null</External>
 	<External>nil</External>
-	<Item class="ModuleScript" referent="RBXC23E8A2272C74F67AA367219388A4B27">
+	<Item class="ModuleScript" referent="RBX97E45D5290E140E19C817C9C45BF077B">
 		<Properties>
 			<Content name="LinkedSource"><null></null></Content>
 			<ProtectedString name="Source"><![CDATA[local reflectionService = game:GetService("ReflectionService")
@@ -64,6 +64,8 @@ function RigReflectorMethods.Destroy(self: RigReflector)
 end
 
 function RigReflectorMethods.Start(self: RigReflector)
+	if not self.Character then return end
+	
 	for _, descendant in next, self.Character:GetDescendants() do
 		task.spawn(self._addAsset, self, descendant)
 	end
@@ -146,7 +148,8 @@ end
 function RigReflectorMethods._syncProperty(self: RigReflector, source: Instance, rigInstance: Instance, propertyName: string)
 	local value = source[propertyName]
 	
-	if typeof(value) == "Instance" and value:IsDescendantOf(self.Character) then
+	local valueIsDescendantOfCharacter = typeof(value) == "Instance" and value:IsDescendantOf(self.Character)
+	if valueIsDescendantOfCharacter then
 		value = self:_getRigEquivalent(value, 3)
 	end
 
@@ -156,10 +159,14 @@ end
 function RigReflectorMethods._connectProperty(self: RigReflector, source: Instance, rigInstance: Instance, propertyName: string)
 	local connection
 	connection = source:GetPropertyChangedSignal(propertyName):Connect(function()
+		if propertyName == "Parent" and not source:IsDescendantOf(self.Character) then
+			return
+		end
+		
 		self:_syncProperty(source, rigInstance, propertyName)
 	end)
 
-	table.insert(self._propertyConnections, connection)
+	self._propertyConnections[#self._propertyConnections + 1] = connection
 end
 
 function RigReflectorMethods._addAsset(self: RigReflector, asset: Instance)
@@ -204,6 +211,15 @@ function RigReflectorMethods._addAsset(self: RigReflector, asset: Instance)
 		copy = Instance.fromExisting(asset)
 	end
 
+	local parentConnection
+	parentConnection = asset:GetPropertyChangedSignal("Parent"):Connect(function()
+		if not asset:IsDescendantOf(self.Character) then
+			copy:Destroy()
+		end
+	end)
+
+	self._propertyConnections[#self._propertyConnections + 1] = parentConnection
+
 	local reflectionProperties = self:_getProperties(asset.ClassName)
 	if reflectionProperties then
 		for _, reflectionProperty in next, reflectionProperties do
@@ -234,8 +250,8 @@ function RigReflectorMethods._addAsset(self: RigReflector, asset: Instance)
 					end
 				end
 
-				self:_syncProperty(asset, copy, reflectionProperty.Name)
-				self:_connectProperty(asset, copy, reflectionProperty.Name)
+				task.spawn(self._syncProperty, self, asset, copy, reflectionProperty.Name)
+				task.spawn(self._connectProperty, self, asset, copy, reflectionProperty.Name)
 			end)
 		end
 	end
@@ -296,7 +312,7 @@ return RigReflector]]></ProtectedString>
 			<int64 name="SourceAssetId">-1</int64>
 			<BinaryString name="Tags"></BinaryString>
 		</Properties>
-		<Item class="ModuleScript" referent="RBXC9805D6AAEB542D8BB4CF362A4362931">
+		<Item class="ModuleScript" referent="RBX4760F3DC41BF4728B2A777CE19CA7B51">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[local SignalConstructor = {}
