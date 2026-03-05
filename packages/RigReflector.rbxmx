@@ -123,9 +123,9 @@ function RigReflectorMethods._getRigEquivalent(self: RigReflector, sourcePart: I
 		parentLocation = parentLocation.Parent
 	until parentLocation == self.Character or parentLocation == game
 
-	if #parentPath == 1 and self.Rig:FindFirstChild(sourcePart.Name) then
-		parentPath[#parentPath + 1] = self.Character
-	end
+	--if #parentPath == 1 and self.Rig:FindFirstChild(sourcePart.Name) then
+	--	parentPath[#parentPath + 1] = self.Character
+	--end
 
 	if parentPath[#parentPath] == self.Character then
 		local rigParent = self.Rig
