@@ -7,6 +7,8 @@
 			<Content name="LinkedSource"><null></null></Content>
 			<ProtectedString name="Source"><![CDATA[local reflectionService = game:GetService("ReflectionService")
 
+local Signal = require("@self/Signal")
+
 local RigReflector = {}
 local RigReflectorMethods = {}
 
@@ -22,6 +24,8 @@ function RigReflector.new(character: Instance, sourceRig: Instance, ignore: { Pr
 		Properties = {} :: { string }?,
 		Classes = {} :: { string }?
 	}
+	
+	reflector.ProcessAdded = Signal.new()
 	
 	reflector.Ignore.Properties = reflector.Ignore.Properties or {}
 	reflector.Ignore.Classes = reflector.Ignore.Classes or {}
@@ -41,6 +45,7 @@ function RigReflectorMethods.Destroy(self: RigReflector)
 		connection:Disconnect()
 	end
 	
+	self.ProcessAdded:Destroy()
 	for i in next, self do
 		self[i] = nil
 	end
@@ -160,6 +165,11 @@ function RigReflectorMethods._addAsset(self: RigReflector, asset: Instance)
 	for _, class in next, self.Ignore.Classes do
 		if asset:IsA(class) then return end
 	end
+	
+	local responses = self.ProcessAdded:Invoke(asset)
+	for _, response in next, responses do
+		if not response then return end
+	end
 
 	local parentPath = {}
 	local parentLocation = asset
@@ -226,5 +236,144 @@ return RigReflector]]></ProtectedString>
 			<int64 name="SourceAssetId">-1</int64>
 			<BinaryString name="Tags"></BinaryString>
 		</Properties>
+		<Item class="ModuleScript" referent="RBXC9805D6AAEB542D8BB4CF362A4362931">
+			<Properties>
+				<Content name="LinkedSource"><null></null></Content>
+				<ProtectedString name="Source"><![CDATA[local SignalConstructor = {}
+local SignalMethods = {}
+
+local tableRemove = table.remove
+local tableFind = table.find
+
+local coroutineRunning = coroutine.running
+local coroutineYield = coroutine.yield
+
+local taskDelay = task.delay
+local taskCancel = task.cancel
+
+function SignalConstructor.new()
+	return setmetatable({ _connections = {} :: { SignalConnection } }, { __index = SignalMethods })
+end
+
+local taskSpawn = task.spawn
+function SignalMethods:Fire<parameters...>(...: parameters...): parameters...
+	for _, connection in next, self._connections do
+		taskSpawn(connection[1], ...)
+	end; return ...
+end
+
+function SignalMethods:Invoke<parameters...>(...: parameters...): { any }
+	local responses = {}
+	for _, connection in next, self._connections do
+		responses[#responses + 1] = connection[1](...) or false
+	end; return responses
+end
+
+local Connection = {}
+function Connection:Disconnect()
+	local _, connections = unpack(self)
+
+	local connectionIndex = tableFind(connections, self)
+	if connectionIndex then
+		tableRemove(connections, connectionIndex)
+	end
+end
+
+function SignalMethods:Connect(func: () -> (), ...)
+	if ... then
+		local subFunction = func
+		local parameters = {...}
+		func = function() subFunction(unpack(parameters)) end 
+	end
+
+	local connections = self._connections
+	local SignalConnection = setmetatable({ func, connections }, { __index = Connection })
+	connections[#connections + 1] = SignalConnection
+	return SignalConnection
+end
+
+function SignalMethods:DisconnectAll()
+	local connections = self._connections
+	for connectionIndex in next, connections do
+		connections[connectionIndex] = nil
+	end
+end
+
+function SignalMethods:Wait(timeout: number?)
+	local thread = coroutineRunning()
+
+	local connection
+
+	local timeoutThread
+	if timeout then
+		timeoutThread = taskDelay(timeout, function() 
+			connection:Disconnect(); 
+			connection = nil; 
+
+			timeoutThread = nil;
+
+			taskSpawn(thread)
+		end)
+	end
+
+	connection = self:Connect(function(...)
+		connection:Disconnect()
+		taskSpawn(thread, ...)
+		if timeoutThread then 
+			taskCancel(timeoutThread);
+			timeoutThread = nil 
+		end
+	end)
+
+	return coroutineYield()
+end
+
+function SignalMethods:Once(func: () -> (), ...)
+	if ... then
+		local subFunction = func
+		local parameters = {...}
+		func = function() subFunction(unpack(parameters)) end 
+	end
+
+	local connection
+	connection = self:Connect(function(...)
+		connection:Disconnect()
+		connection = nil
+
+		taskSpawn(func, ...)
+	end)
+
+	return connection
+end
+
+function SignalMethods:Destroy()
+	self:DisconnectAll()
+
+	local connections = self._connections
+	for i in next, connections do
+		connections[i] = nil
+	end
+
+	for i in next, self do
+		self[i] = nil
+	end
+
+	setmetatable(self, nil)
+	return true
+end
+
+export type SignalConnection = typeof(Connection)
+export type Signal = typeof(SignalConstructor.new())
+
+return SignalConstructor]]></ProtectedString>
+				<string name="ScriptGuid">{F497A2E4-70C6-458C-AD49-726E1B807446}</string>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<string name="Name">Signal</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+			</Properties>
+		</Item>
 	</Item>
 </roblox>
