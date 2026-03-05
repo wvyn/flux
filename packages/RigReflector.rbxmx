@@ -254,6 +254,39 @@ end
 
 export type RigReflector = typeof(RigReflector.new(nil :: any, nil :: any))
 
+function RigReflector:GetRigEquivalent(character: Model, rig: Model, sourcePart: Instance, yield: number?)
+	local parentPath = { sourcePart }
+	local parentLocation = sourcePart
+
+	repeat
+		if parentLocation == character or not parentLocation then
+			break
+		end
+
+		parentPath[#parentPath + 1] = parentLocation.Parent
+		parentLocation = parentLocation.Parent
+	until parentLocation == character or parentLocation == game
+
+	if #parentPath == 1 and rig:FindFirstChild(sourcePart.Name) then
+		parentPath[#parentPath + 1] = character
+	end
+
+	if parentPath[#parentPath] == character then
+		local rigParent = rig
+
+		for i = #parentPath - 1, 1, -1 do
+			if not rigParent then break end
+			if yield then
+				rigParent = rigParent:WaitForChild(parentPath[i].Name, yield)
+			else
+				rigParent = rigParent:FindFirstChild(parentPath[i].Name)
+			end
+		end
+
+		return rigParent
+	end
+end
+
 return RigReflector]]></ProtectedString>
 			<string name="ScriptGuid">{15F4C90E-973C-4EF7-BF00-BA11811B862E}</string>
 			<BinaryString name="AttributesSerialize"></BinaryString>
