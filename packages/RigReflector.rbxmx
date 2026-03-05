@@ -26,6 +26,7 @@ function RigReflector.new(character: Instance, sourceRig: Instance, ignore: { Pr
 	}
 	
 	reflector.ProcessAdded = Signal.new()
+	reflector.AssetAdded = Signal.new()
 	
 	reflector.Ignore.Properties = reflector.Ignore.Properties or {}
 	reflector.Ignore.Classes = reflector.Ignore.Classes or {}
@@ -219,6 +220,8 @@ function RigReflectorMethods._addAsset(self: RigReflector, asset: Instance)
 	end
 	
 	copy.Parent = rigParent
+	
+	self.AssetAdded:Fire(copy)
 end
 
 function RigReflectorMethods._removeAsset(self: RigReflector, asset: Instance)
