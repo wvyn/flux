@@ -2,7 +2,7 @@
 	<Meta name="ExplicitAutoJoints">true</Meta>
 	<External>null</External>
 	<External>nil</External>
-	<Item class="ModuleScript" referent="RBX97E45D5290E140E19C817C9C45BF077B">
+	<Item class="ModuleScript" referent="RBX679BA7ADF8404954BC4A5A52240719B5">
 		<Properties>
 			<Content name="LinkedSource"><null></null></Content>
 			<ProtectedString name="Source"><![CDATA[local reflectionService = game:GetService("ReflectionService")
@@ -171,6 +171,7 @@ end
 
 function RigReflectorMethods._addAsset(self: RigReflector, asset: Instance)
 	if asset:IsA("Status") then return end
+	if asset:IsA("TouchTransmitter") then return end
 	
 	for _, class in next, self.Ignore.Classes do
 		if asset:IsA(class) then return end
@@ -312,7 +313,7 @@ return RigReflector]]></ProtectedString>
 			<int64 name="SourceAssetId">-1</int64>
 			<BinaryString name="Tags"></BinaryString>
 		</Properties>
-		<Item class="ModuleScript" referent="RBX4760F3DC41BF4728B2A777CE19CA7B51">
+		<Item class="ModuleScript" referent="RBX61F96DD0CFDF4A429D0E57A5C81FDAFF">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[local SignalConstructor = {}
