@@ -78,8 +78,10 @@ function SignalMethods:Wait(timeout: number?)
 			connection = nil; 
 
 			timeoutThread = nil;
-
-			taskSpawn(thread)
+			
+			if coroutineStatus(thread) == "suspended" then
+				taskSpawn(thread)
+			end
 		end)
 	end
 
