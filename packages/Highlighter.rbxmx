@@ -1,24 +1,63 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
-    <Meta name="ExplicitAutoJoints">true</Meta>
-    <Item class="ModuleScript" referent="RBXXSPQY417634GOVP5Y5TTN3I037TRZFCX">
-        <Properties>
-            <string name="Name">Highlighter</string>
-            <string name="ScriptGuid">{c5ecb538-f292-465b-a5a9-3017f67f0d11}</string>
-            <ProtectedString name="Source"><![CDATA[local highlighter = {}
+	<Meta name="ExplicitAutoJoints">true</Meta>
+	<External>null</External>
+	<External>nil</External>
+	<Item class="ModuleScript" referent="RBX4A720DBBE9154CC8A16DC325FBDA21D6">
+		<Properties>
+			<Content name="LinkedSource"><null></null></Content>
+			<ProtectedString name="Source"><![CDATA[local highlighter = {}
 local keywords = {
 	lua = {
-		"and", "break", "or", "else", "elseif", "if", "then", "until", "repeat", "while", "do", "for", "in", "end",
-		"local", "return", "function", "export", "not"
+		"and","break","do","else","elseif","end","for","function","if","in",
+		"local","not","or","repeat","return","then","until","while",
+
+		"continue","export","type","typeof",
 	},
+
 	rbx = {
-		"game", "workspace", "script", "math", "string", "table", "task", "wait", "select", "next", "Enum",
-		"error", "warn", "tick", "assert", "shared", "loadstring", "tonumber", "tostring", "type",
-		"typeof", "unpack", "print", "Instance", "CFrame", "Vector3", "Vector2", "Color3", "UDim", "UDim2", "Ray", "BrickColor",
-		"OverlapParams", "RaycastParams", "Axes", "Random", "Region3", "Rect", "TweenInfo", "ColorSequence", "buffer",
-		"collectgarbage", "utf8", "pcall", "xpcall", "_G", "setmetatable", "getmetatable", "os", "pairs", "ipairs"
+		"_G","_VERSION","game","Game","workspace","Workspace","shared",
+
+		"assert","collectgarbage","error","gcinfo","getfenv","setfenv",
+		"getmetatable","setmetatable",
+		"ipairs","pairs","next",
+		"pcall","xpcall","ypcall",
+		"print","warn","printidentity",
+		"rawequal","rawget","rawset","rawlen",
+		"select","tonumber","tostring","type","typeof","unpack",
+		"require","loadstring","newproxy",
+
+		"wait","Wait","spawn","Spawn","delay","Delay",
+		"tick","time","elapsedTime","ElapsedTime",
+
+		"UserSettings","settings","Stats","stats","Version","version",
 	},
+	
+	rbxclass = {
+		"Wyverion", "Process",
+		
+		"Instance","Enum",
+
+		"math","string","table","utf8","os","coroutine","debug","bit32","task",
+
+		"CFrame","Vector2","Vector3","Vector2int16","Vector3int16",
+		"UDim","UDim2","Ray","Region3","Region3int16","Rect",
+		"Axes","Faces",
+		"Color3","BrickColor",
+		"NumberRange","NumberSequence","NumberSequenceKeypoint",
+		"ColorSequence","ColorSequenceKeypoint",
+		"PhysicalProperties","TweenInfo","Random",
+		"RaycastParams","OverlapParams",
+		"DockWidgetPluginGuiInfo","PathWaypoint",
+		"DateTime","CatalogSearchParams","Font",
+		"RotationCurveKey","FloatCurveKey",
+		"SharedTable","buffer"
+	},
+
 	operators = {
-		"#", "+", "-", "*", "%", "/", "^", "=", "~", "=", "<", ">", ",", ".", "(", ")", "{", "}", "[", "]", ";", ":"
+		"#","+","-","*","%","/","^",
+		"=","==","~=","<",">","<=",">=",
+		"(",")","{","}","[","]",
+		";",":",",",".","..","...",
 	}
 }
 
@@ -26,153 +65,267 @@ local colors = {
 	numbers = Color3.fromRGB(255, 198, 0),
 	boolean = Color3.fromRGB(255, 198, 0),
 	operator = Color3.fromRGB(232, 210, 40),
-	lua = Color3.fromRGB(132, 214, 247),
-	rbx = Color3.fromRGB(248, 109, 124),
+	rbx = Color3.fromRGB(132, 214, 247),
+	lua = Color3.fromRGB(248, 109, 124),
 	str = Color3.fromRGB(56, 241, 87),
 	comment = Color3.fromRGB(102, 102, 102),
 	null = Color3.fromRGB(255, 198, 0),
 	call = Color3.fromRGB(253, 251, 172),
 	self_call = Color3.fromRGB(253, 251, 172),
 	local_color = Color3.fromRGB(248, 109, 124),
-	function_color = Color3.fromRGB(253, 251, 172),
+	function_color = Color3.fromRGB(248, 109, 124),
 	self_color = Color3.fromRGB(248, 109, 124),
 	local_property = Color3.fromRGB(97, 161, 241),
+	type_annotation = Color3.fromRGB(97, 161, 241),
 }
 
-local function createKeywordSet(keywords)
-	local keywordSet = {}
-	for _, keyword in ipairs(keywords) do
-		keywordSet[keyword] = true
+local function createSet(list: { any })
+	local set = {}
+	for i = 1, #list do
+		set[list[i]] = true
 	end
-	return keywordSet
+	return set
 end
 
-local luaSet = createKeywordSet(keywords.lua)
-local rbxSet = createKeywordSet(keywords.rbx)
-local operatorsSet = createKeywordSet(keywords.operators)
+local luaSet = createSet(keywords.lua)
+local rbxSet = createSet(keywords.rbx)
+local rbxclassSet = createSet(keywords.rbxclass)
+local operatorsSet = createSet(keywords.operators)
 
-local function getHighlight(tokens, index)
-	local token = tokens[index]
+local function tokenize(source: string)
+	local tokens = {}
+	local i = 1
 
-	if colors[token .. "_color"] then
-		return colors[token .. "_color"]
+	while i <= #source do
+		local c = source:sub(i, i)
+
+		-- whitespace
+		if c:match("%s") then
+			tokens[#tokens + 1] = c
+			i += 1
+
+			-- vararg
+		elseif source:sub(i, i+2) == "..." then
+			tokens[#tokens + 1] = "..."
+			i += 3
+
+			-- concat
+		elseif source:sub(i, i+1) == ".." then
+			tokens[#tokens + 1] = ".."
+			i += 2
+			-- comments
+		elseif source:sub(i, i+1) == "--" then
+			local start = i
+			while i <= #source and source:sub(i, i) ~= "\n" do
+				i += 1
+			end
+			tokens[#tokens + 1] = source:sub(start, i-1)
+
+			-- strings
+		elseif c == "\"" or c == "'" or c == "`" then
+			local quote = c
+			local start = i
+			i += 1
+
+			while i <= #source do
+				local ch = source:sub(i, i)
+
+				if ch == quote then
+					local backslashCount = 0
+					local j = i - 1
+
+					while j >= start and source:sub(j, j) == "\\" do
+						backslashCount += 1
+						j -= 1
+					end
+
+					if backslashCount % 2 == 0 then
+						i += 1
+						break
+					end
+				end
+
+				i += 1
+			end
+
+			tokens[#tokens + 1] = source:sub(start, i-1)
+
+			-- :: operator
+		elseif source:sub(i, i+1) == "::" then
+			tokens[#tokens + 1] = "::"
+			i += 2
+
+			-- identifiers
+		elseif c:match("[%a_]") then
+			local start = i
+			while i <= #source and source:sub(i, i):match("[%w_]") do
+				i += 1
+			end
+			tokens[#tokens + 1] = source:sub(start, i-1)
+
+			-- numbers
+		elseif c:match("%d") then
+			local start = i
+			while i <= #source and source:sub(i, i):match("[%d%.]") do
+				i += 1
+			end
+			tokens[#tokens + 1] = source:sub(start, i-1)
+
+			-- operators
+		else
+			tokens[#tokens + 1] = c
+			i += 1
+		end
 	end
 
-	if tonumber(token) then
-		return colors.numbers
-	elseif token == "nil" then
-		return colors.null
-	elseif token:sub(1, 2) == "--" then
-		return colors.comment
-	elseif operatorsSet[token] then
-		return colors.operator
-	elseif luaSet[token] then
-		return colors.rbx
-	elseif rbxSet[token] then
-		return colors.lua
-	elseif token:sub(1, 1) == "\"" or token:sub(1, 1) == "\'" then
-		return colors.str
-	elseif token == "true" or token == "false" then
-		return colors.boolean
-	end
+	return tokens
+end
 
-	if tokens[index + 1] == "(" then
-		if tokens[index - 1] == ":" then
-			return colors.self_call
+local function highlightTokens(tokens: { string })
+	local result = {}
+
+	local typeDepth = 0
+	local inType = false
+
+	for i = 1, #tokens do
+		local token = tokens[i]
+		local color
+		
+		if token == "..." then
+			result[#result + 1] = "..."
+			continue
 		end
 
-		return colors.call
-	end
+		-- type mode
+		if token == "::" then
+			inType = true
+			typeDepth = 0
+			color = colors.operator
 
-	if tokens[index - 1] == "." then
-		if tokens[index - 2] == "Enum" then
-			return colors.rbx
+		elseif token == ":" then
+			if not (tokens[i+1] and tokens[i+2] == "(") then
+				inType = true
+				typeDepth = 0
+			end
+			color = colors.operator
+		elseif inType and typeDepth <= 0 then
+			if token == "," or token == ")" or token == "=" or token == "\n" or token == ";" or luaSet[token] then
+				inType = false
+			end
 		end
 
-		return colors.local_property
+		if inType then
+			if token == "{" or token == "(" or token == "<" then
+				typeDepth += 1
+			elseif token == "}" or token == ")" or token == ">" then
+				typeDepth -= 1
+			end
+
+			local prevNonWs
+			for j = i-1, 1, -1 do
+				if not tokens[j]:match("^%s+$") then
+					prevNonWs = tokens[j]
+					break
+				end
+			end
+
+			if token:match("^[%a_][%w_]*$") then
+				if not (
+					prevNonWs == ":" or
+						prevNonWs == "::" or
+						prevNonWs == "|" or
+						prevNonWs == "&" or
+						prevNonWs == "," or
+						prevNonWs == "{" or
+						prevNonWs == "<"
+					) and typeDepth <= 0 then
+					inType = false
+				end
+			end
+
+			if inType then
+				if token == "|" or token == "&" or token == "," then
+					color = colors.operator
+				elseif token:match("^[%a_][%w_]*$") then
+					color = colors.type_annotation
+				elseif operatorsSet[token] then
+					color = colors.operator
+				end
+			end
+		else
+			if tonumber(token) then
+				color = colors.numbers
+			elseif token == "true" or token == "false" then
+				color = colors.boolean
+			elseif token == "nil" then
+				color = colors.null
+			elseif token == "self" then
+				color = colors.self_color
+			elseif token:sub(1,2) == "--" then
+				color = colors.comment
+			elseif token:sub(1,1) == "\"" or token:sub(1,1) == "'" or token:sub(1,1) == "`" then
+				color = colors.str
+			elseif luaSet[token] then
+				color = colors.lua
+			elseif rbxSet[token] or rbxclassSet[token] then
+				color = colors.rbx
+			elseif operatorsSet[token] then
+				color = colors.operator
+			end
+
+			if tokens[i-1] == "." then
+				local prev = tokens[i-2]
+
+				if rbxclassSet[prev] then
+					color = colors.rbx
+				else
+					if tokens[i+1] == "(" then
+						color = colors.call
+					else
+						color = colors.local_property
+					end
+				end
+			end
+
+			if tokens[i+1] == "(" then
+				if not (color or rbxSet[token] or rbxclassSet[token]) then
+					if tokens[i-1] == ":" then
+						color = colors.self_call
+					else
+						color = colors.call
+					end
+				end
+			end
+		end
+
+		if color then
+			local replacedText = token:gsub("<", "&lt;"):gsub(">", "&gt;")
+			result[#result + 1] = string.format(
+				"<font color=\"#%s\">%s</font>",
+				color:ToHex(),
+				replacedText
+			)
+		else
+			result[#result + 1] = token
+		end
 	end
+
+	return table.concat(result)
 end
 
 function highlighter.run(source: string)
-	local tokens = {}
-	local currentToken = ""
-
-	local inString = false
-	local inComment = false
-	local commentPersist = false
-
-	for i = 1, #source do
-		local character = source:sub(i, i)
-
-		if inComment then
-			if character == "\n" and not commentPersist then
-				table.insert(tokens, currentToken)
-				table.insert(tokens, character)
-				currentToken = ""
-
-				inComment = false
-			elseif source:sub(i - 1, i) == "]]" and commentPersist then
-				currentToken ..= "]"
-
-				table.insert(tokens, currentToken)
-				currentToken = ""
-
-				inComment = false
-				commentPersist = false
-			else
-				currentToken = currentToken .. character
-			end
-		elseif inString then
-			if character == inString and source:sub(i-1, i-1) ~= "\\" or character == "\n" then
-				currentToken = currentToken .. character
-				inString = false
-			else
-				currentToken = currentToken .. character
-			end
-		else
-			if source:sub(i, i + 1) == "--" then
-				table.insert(tokens, currentToken)
-				currentToken = "-"
-				inComment = true
-				commentPersist = source:sub(i + 2, i + 3) == "[["
-			elseif character == "\"" or character == "\'" then
-				table.insert(tokens, currentToken)
-				currentToken = character
-				inString = character
-			elseif operatorsSet[character] then
-				table.insert(tokens, currentToken)
-				table.insert(tokens, character)
-				currentToken = ""
-			elseif character:match("[%w_]") then
-				currentToken = currentToken .. character
-			else
-				table.insert(tokens, currentToken)
-				table.insert(tokens, character)
-				currentToken = ""
-			end
-		end
-	end
-
-	table.insert(tokens, currentToken)
-
-	local highlighted = {}
-
-	for i, token in ipairs(tokens) do
-		local highlight = getHighlight(tokens, i)
-
-		if highlight then
-			local syntax = string.format("<font color = \"#%s\">%s</font>", highlight:ToHex(), token:gsub("<", "&lt;"):gsub(">", "&gt;"))
-
-			table.insert(highlighted, syntax)
-		else
-			table.insert(highlighted, token)
-		end
-	end
-
-	return table.concat(highlighted)
+	local tokens = tokenize(source)
+	return highlightTokens(tokens)
 end
 
 return highlighter]]></ProtectedString>
-        </Properties>
-    </Item>
+			<string name="ScriptGuid">{D85E3FE5-3B69-430B-BB1E-B95B6AC9E4A7}</string>
+			<BinaryString name="AttributesSerialize"></BinaryString>
+			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+			<bool name="DefinesCapabilities">false</bool>
+			<string name="Name">Highlighter</string>
+			<int64 name="SourceAssetId">-1</int64>
+			<BinaryString name="Tags"></BinaryString>
+		</Properties>
+	</Item>
 </roblox>
