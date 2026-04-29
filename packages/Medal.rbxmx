@@ -1,0 +1,334 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+	<Meta name="ExplicitAutoJoints">true</Meta>
+	<External>null</External>
+	<External>nil</External>
+	<Item class="ModuleScript" referent="RBX05F08C6CC3F14A7CA45BC9A406934B40">
+		<Properties>
+			<Content name="LinkedSource"><null></null></Content>
+			<ProtectedString name="Source"><![CDATA[local httpService = game:GetService("HttpService")
+
+local Medal = {}
+local MedalMethods = {}
+
+--[[
+<code><em>MedalConfiguration</em></code>:
+- <em><strong>StandardAPIKey</strong></em>: string?,
+- <em><strong>PartnerAPIKey</strong></em>: string?,
+]]
+function Medal.new(configuration: MedalConfiguration)
+	assert(unpack(MedalMethods._validateConfiguration(configuration)))
+
+	return setmetatable({
+		Configuration = configuration
+	}, { __index = MedalMethods })
+end
+
+--[[
+<code>Validate Configuration</code>
+]]
+function MedalMethods._validateConfiguration(configuration: MedalConfiguration)
+	local standardAPIKey = configuration.StandardAPIKey
+	local partnerAPIKey = configuration.PartnerAPIKey
+
+	return 
+		if not standardAPIKey and not partnerAPIKey then
+		{ false, "APIKey is required" }
+
+		else if standardAPIKey and typeof(standardAPIKey) ~= "string" then
+		{ false, "StandardAPIKey must be a string" }
+		else if partnerAPIKey and typeof(partnerAPIKey) ~= "string" then
+		{ false, "PartnerAPIKey must be a string" }
+
+		else if partnerAPIKey and not partnerAPIKey:match("^%d+,.+") then
+		{ false, "APIKey must be in the format of <number>,<string>" }
+
+		else
+		{ true, "Configuration is Valid" }
+end
+
+--[[
+<code>Send HTTP Request</code>
+]]
+function MedalMethods._sendRequest(self: Medal, url: string, method: ("POST" | "GET")?, body: string?, contentType: "application/json"?)
+	return pcall(function()
+		local headers = self.Configuration.PartnerAPIKey and {
+			["x-authentication"] = self.Configuration.PartnerAPIKey
+		} or {
+			Authorization = self.Configuration.StandardAPIKey
+		}
+
+		if contentType then
+			headers["Content-Type"] = contentType
+		end
+
+		return httpService:RequestAsync({
+			Url = url,
+			Headers = headers,
+			Method = method,
+			Body = body
+		})
+	end)
+end
+
+--[[
+<code>Query Params</code>
+]]
+function MedalMethods._queryParams(self: Medal, params: { [string]: any})
+	local queryParams = {}
+
+	for key, value in next, params do
+		queryParams[#queryParams + 1] = `{httpService:UrlEncode(key)}={httpService:UrlEncode(value)}`
+	end
+
+	return table.concat(queryParams, "&")
+end
+
+--[[
+<code>Query URL Params</code>
+]]
+function MedalMethods._queryUrl(self: Medal, url: string, params: { [string]: any})
+	return `{url}?{self:_queryParams(params)}`
+end
+
+--[[
+<code>Search Clips on Medal</code>
+Search for clips
+- <em><strong>searchQuery</strong></em>: number, <em>-- Customize this field to your needs. Make sure to use URI encoding.</em>
+- <em><strong>limit</strong></em>: number, <em>-- How many objects to return. By default you have access to 1000 objects per query.</em>
+- <em><strong>offset</strong></em>: number, <em>-- How many objects to skip. limit + offset can not exceed 1000 by default.</em>
+]]
+function MedalMethods.SearchClips(self: Medal, searchQuery: string, searchConfiguration: { offset: number?, categoryId: number?, limit: number? }?)
+	searchConfiguration = searchConfiguration or {}
+
+	local offset: number? = searchConfiguration.offset
+	local categoryId: number? = searchConfiguration.categoryId
+	local limit: number? = searchConfiguration.limit
+
+	local success, response = assert(self:_sendRequest(self:_queryUrl("https://developers.medal.tv/v1/search", {
+		text = searchQuery,
+		offset = offset,
+		categoryId = categoryId,
+		limit = limit
+	})))
+
+	return httpService:JSONDecode(response.Body)
+end
+
+--[[
+<code><em>Get Categories</em></code>
+Get full list of all categories on Medal
+
+<em><code>Configuration:</code></em>
+- <em><strong>steamappid</strong></em>: number, <em>-- adds steamappid to every link and iframe returned, so users viewing and sharing the clip can get the game on steam</em>
+- <em><strong>cta</strong></em>: number, <em>-- Hide donation buttons or user-generated call-to-actions on the clip, most commonly used for safety reasons</em>
+- <em><strong>autoplay</strong></em>: number, <em>-- Specify whether whe iframes returned contain the autoplay tag</em>
+- <em><strong>loop</strong></em>: number, <em>-- Specify whether whe iframes returned loop content</em>
+- <em><strong>muted</strong></em>: number, <em>-- Specify whether whe iframes returned should auto-play sound. By default it does not.</em>
+- <em><strong>width</strong></em>: number, <em>-- The width of the returned clip player</em>
+- <em><strong>height</strong></em>: number, <em>-- The height of the returned clip player</em>
+]]
+function MedalMethods.GetCategories(
+	self: Medal,
+	configuration: {
+		steamappid: string?,
+		cta: number,
+		autoplay: number,
+		loop: number,
+		muted: number,
+		width: number,
+		height: number,
+		customStyleClass: string
+	}?
+)
+	configuration = configuration or {}
+
+	local steamappid = configuration.steamappid
+	local cta = configuration.cta
+	local autoplay = configuration.autoplay
+	local loop = configuration.loop
+	local muted = configuration.muted
+	local width = configuration.width
+	local height = configuration.height
+	local customStyleClass = configuration.customStyleClass
+
+	local success, response = assert(self:_sendRequest(self:_queryUrl("https://developers.medal.tv/v1/categories", {
+		steamappid = steamappid,
+		cta = cta,
+		autoplay = autoplay,
+		loop = loop,
+		muted = muted,
+		width = width,
+		height = height,
+		customStyleClass = customStyleClass
+	})))
+
+	return httpService:JSONDecode(response.Body)
+end
+
+--[[
+<code><em>Get Trending</em></code>
+Returns top clips that are trending on Medal
+- <em><strong>categoryId</strong></em>: number, <em>-- Filter by game.</em>
+- <em><strong>limit</strong></em>: number, <em>-- How many objects to return. By default you have access to 1000 objects per query.</em>
+- <em><strong>offset</strong></em>: number, <em>-- How many objects to skip. limit + offset can not exceed 1000 by default.</em>
+]]
+function MedalMethods.GetTrending(self: Medal, limit: number?, categoryId: number, offset: number?)
+	local success, response = assert(self:_sendRequest(self:_queryUrl("https://developers.medal.tv/v1/trending", {
+		categoryId = categoryId,
+		limit = limit,
+		offset = offset,
+	})))
+
+	return httpService:JSONDecode(response.Body)
+end
+
+--[[
+<code><em>Get Latest</em></code>
+Latests clips from Medal
+- <em><strong>userId</strong></em>: number, <em>-- The user ID to search for.</em>
+- <em><strong>categoryId</strong></em>: number, <em>-- Filter by game.</em>
+- <em><strong>limit</strong></em>: number, <em>-- How many objects to return. By default you have access to 1000 objects per query.</em>
+- <em><strong>offset</strong></em>: number, <em>-- How many objects to skip. limit + offset can not exceed 1000 by default.</em>
+]]
+function MedalMethods.GetLatest(self: Medal, userId: number, limit: number?, categoryId: number, offset: number)
+	local success, response = assert(self:_sendRequest(self:_queryUrl("https://developers.medal.tv/v1/latest", {
+		userId = userId,
+		categoryId = categoryId,
+		limit = limit,
+		offset = offset
+	})))
+
+	return httpService:JSONDecode(response.Body)
+end
+
+--[[
+<code><em>Get Medal From UserId</em></code>
+Get medal information from a roblox user's userid
+]]
+function MedalMethods.GetMedalFromRobloxUserId(self: Medal, robloxUserId: number):
+	{
+		userId: string,
+		hasMedalUser: boolean
+	}
+	
+	local success, response = assert(self:_sendRequest(self:_queryUrl("https://medal.tv/api/partners/robloxGame/user", {
+		robloxUserId = robloxUserId
+	})))
+
+	return httpService:JSONDecode(response.Body)
+end
+
+--[[
+<code><em>Get Quest Data</em></code>
+Get quest data for a Roblox user
+- <em><strong>questId</strong></em>: number, <em>-- Quest id</em>
+- <em><strong>robloxUserId</strong></em>: number, <em>-- Roblox UserId</em>
+]]
+function MedalMethods.GetQuestData(self: Medal, questId: string, robloxUserId: number):
+	{
+		hasMedalUser: boolean,
+		userId: string,
+		quests: {
+			{
+				claimed: boolean,
+				completed: boolean,
+				id: string,
+				name: string,
+				requirements: {
+					{
+						completed: boolean,
+						completedCount: number,
+						name: string,
+						requiredCount: number
+					}
+				}
+			}
+		}
+	}
+	
+	local success, response = assert(self:_sendRequest(self:_queryUrl("https://medal.tv/api/partners/robloxGame/user", {
+		robloxUserId = robloxUserId,
+		questId = questId
+	})))
+
+	return httpService:JSONDecode(response.Body)
+end
+
+--[[
+<code><em>Get Roblox Clips</em></code>
+Get clips given a <strong>Roblox UserId</strong> and <strong>UniverseId</strong>
+- <em><strong>robloxUserId</strong></em>: number, <em>-- Roblox UserId</em>
+- <em><strong>robloxUniverseId</strong></em>: number, <em>-- Roblox UniverseId</em>
+- <em><strong>maxQueries</strong></em>: number, <em>-- Number of clips required</em>
+- <em><strong>fromTimestamp</strong></em>: number, <em>-- Timestamp in millis to get clips from</em>
+- <em><strong>includeMobile</strong></em>: boolean, <em>-- Include mobile clips (= any Roblox clips)</em>
+]]
+function MedalMethods.GetRobloxClips(self: Medal, robloxUserId: number, robloxUniverseId: number, maxQueries: number?, fromTimestamp: number?, includeMobile: boolean?)
+	local success, response = assert(self:_sendRequest(self:_queryUrl("https://medal.tv/api/partners/robloxGame/user/clips", {
+		robloxUserId = robloxUserId,
+		robloxUniverseId = robloxUniverseId,
+		from = fromTimestamp,
+		max = maxQueries,
+		includeMobile = includeMobile
+	})))
+
+	return httpService:JSONDecode(response.Body)
+end
+
+--[[
+<code><em>Claim Quest</em></code>
+Claim a quest using a <strong>Medal UserId</strong> and <strong>QuestId</strong>
+- <em><strong>medalUserId</strong></em>: string, <em>-- Medal UserId</em>
+- <em><strong>questId</strong></em>: string, <em>-- Quest id</em>
+]]
+function MedalMethods.ClaimQuestReward(self: Medal, medalUserId: string, questId: string)
+	local success, response = assert(self:_sendRequest(`https://medal.tv/api/partners/quests/{questId}/reward/claim`, "POST", httpService:JSONEncode({
+		userId = medalUserId
+	}), "application/json"))
+	
+	return response -- unsure what it returns exactly
+end
+
+--[[
+<code><em>Validate and Claim Quest</em></code>
+Check if you can claim a quest using a <strong>Roblox UserId</strong> and <strong>QuestId</strong> then claims it if all the tasks are completed.
+- <em><strong>robloxUserId</strong></em>: number, <em>-- Roblox UserId</em>
+- <em><strong>questId</strong></em>: string, <em>-- Quest id</em>
+]]
+function MedalMethods.ValidateAndClaimQuestReward(self: Medal, robloxUserId: string, questId: string)
+	local questData = self:GetQuestData(questId, robloxUserId)
+	local claimedQuests: typeof(questData.quests) = {}
+	
+	if questData.hasMedalUser then
+		for _, quest in next, questData.quests do
+			if quest.id == questId and quest.completed and not quest.claimed then
+				claimedQuests[#claimedQuests + 1] = quest
+			end
+		end
+	end
+	
+	for _, quest in next, claimedQuests do
+		self:ClaimQuestReward(questData.userId, quest.id)
+	end
+	
+	return claimedQuests
+end
+
+export type Medal = typeof(Medal.new())
+
+export type MedalConfiguration = {
+	StandardAPIKey: string?;
+	PartnerAPIKey: string?;
+}
+
+return Medal]]></ProtectedString>
+			<string name="ScriptGuid">{4FD790BD-8566-466F-9EF3-026DCF31B00F}</string>
+			<BinaryString name="AttributesSerialize"></BinaryString>
+			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+			<bool name="DefinesCapabilities">false</bool>
+			<string name="Name">Medal</string>
+			<int64 name="SourceAssetId">-1</int64>
+			<BinaryString name="Tags"></BinaryString>
+		</Properties>
+	</Item>
+</roblox>
