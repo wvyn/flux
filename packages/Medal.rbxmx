@@ -2,7 +2,7 @@
 	<Meta name="ExplicitAutoJoints">true</Meta>
 	<External>null</External>
 	<External>nil</External>
-	<Item class="ModuleScript" referent="RBX05F08C6CC3F14A7CA45BC9A406934B40">
+	<Item class="ModuleScript" referent="RBXFBFD03A739AB4FEA8075E186967D538C">
 		<Properties>
 			<Content name="LinkedSource"><null></null></Content>
 			<ProtectedString name="Source"><![CDATA[local httpService = game:GetService("HttpService")
@@ -34,12 +34,12 @@ function MedalMethods._validateConfiguration(configuration: MedalConfiguration)
 		if not standardAPIKey and not partnerAPIKey then
 		{ false, "APIKey is required" }
 
-		else if standardAPIKey and typeof(standardAPIKey) ~= "string" then
+		else if standardAPIKey and typeof(standardAPIKey) ~= "string" and typeof(standardAPIKey) ~= "Secret" then
 		{ false, "StandardAPIKey must be a string" }
-		else if partnerAPIKey and typeof(partnerAPIKey) ~= "string" then
+		else if partnerAPIKey and typeof(partnerAPIKey) ~= "string" and typeof(partnerAPIKey) ~= "Secret" then
 		{ false, "PartnerAPIKey must be a string" }
 
-		else if partnerAPIKey and not partnerAPIKey:match("^%d+,.+") then
+		else if partnerAPIKey and typeof(partnerAPIKey) ~= "Secret" and not partnerAPIKey:match("^%d+,.+") then
 		{ false, "APIKey must be in the format of <number>,<string>" }
 
 		else
@@ -191,6 +191,9 @@ Latests clips from Medal
 - <em><strong>offset</strong></em>: number, <em>-- How many objects to skip. limit + offset can not exceed 1000 by default.</em>
 ]]
 function MedalMethods.GetLatest(self: Medal, userId: number, limit: number?, categoryId: number, offset: number)
+	assert(userId, "UserId is required")
+	assert(typeof(userId) == "number", "UserId must be a number")
+	
 	local success, response = assert(self:_sendRequest(self:_queryUrl("https://developers.medal.tv/v1/latest", {
 		userId = userId,
 		categoryId = categoryId,
@@ -211,6 +214,9 @@ function MedalMethods.GetMedalFromRobloxUserId(self: Medal, robloxUserId: number
 		hasMedalUser: boolean
 	}
 	
+	assert(robloxUserId, "robloxUserId is required")
+	assert(typeof(robloxUserId) == "number", "robloxUserId must be a number")
+
 	local success, response = assert(self:_sendRequest(self:_queryUrl("https://medal.tv/api/partners/robloxGame/user", {
 		robloxUserId = robloxUserId
 	})))
@@ -228,24 +234,15 @@ function MedalMethods.GetQuestData(self: Medal, questId: string, robloxUserId: n
 	{
 		hasMedalUser: boolean,
 		userId: string,
-		quests: {
-			{
-				claimed: boolean,
-				completed: boolean,
-				id: string,
-				name: string,
-				requirements: {
-					{
-						completed: boolean,
-						completedCount: number,
-						name: string,
-						requiredCount: number
-					}
-				}
-			}
-		}
+		quests: { QuestData }
 	}
 	
+	assert(questId, "questId is required")
+	assert(typeof(questId) == "string", "questId must be a string")
+	
+	assert(robloxUserId, "robloxUserId is required")
+	assert(typeof(robloxUserId) == "number", "robloxUserId must be a number")
+
 	local success, response = assert(self:_sendRequest(self:_queryUrl("https://medal.tv/api/partners/robloxGame/user", {
 		robloxUserId = robloxUserId,
 		questId = questId
@@ -264,6 +261,12 @@ Get clips given a <strong>Roblox UserId</strong> and <strong>UniverseId</strong>
 - <em><strong>includeMobile</strong></em>: boolean, <em>-- Include mobile clips (= any Roblox clips)</em>
 ]]
 function MedalMethods.GetRobloxClips(self: Medal, robloxUserId: number, robloxUniverseId: number, maxQueries: number?, fromTimestamp: number?, includeMobile: boolean?)
+	assert(robloxUserId, "robloxUserId is required")
+	assert(typeof(robloxUserId) == "number", "robloxUserId must be a number")
+	
+	assert(robloxUniverseId, "robloxUniverseId is required")
+	assert(typeof(robloxUniverseId) == "number", "robloxUniverseId must be a number")
+	
 	local success, response = assert(self:_sendRequest(self:_queryUrl("https://medal.tv/api/partners/robloxGame/user/clips", {
 		robloxUserId = robloxUserId,
 		robloxUniverseId = robloxUniverseId,
@@ -282,10 +285,16 @@ Claim a quest using a <strong>Medal UserId</strong> and <strong>QuestId</strong>
 - <em><strong>questId</strong></em>: string, <em>-- Quest id</em>
 ]]
 function MedalMethods.ClaimQuestReward(self: Medal, medalUserId: string, questId: string)
+	assert(medalUserId, "medalUserId is required")
+	assert(typeof(medalUserId) == "string", "medalUserId must be a string")
+	
+	assert(questId, "questId is required")
+	assert(typeof(questId) == "string", "questId must be a string")
+	
 	local success, response = assert(self:_sendRequest(`https://medal.tv/api/partners/quests/{questId}/reward/claim`, "POST", httpService:JSONEncode({
 		userId = medalUserId
 	}), "application/json"))
-	
+
 	return response -- unsure what it returns exactly
 end
 
@@ -296,9 +305,15 @@ Check if you can claim a quest using a <strong>Roblox UserId</strong> and <stron
 - <em><strong>questId</strong></em>: string, <em>-- Quest id</em>
 ]]
 function MedalMethods.ValidateAndClaimQuestReward(self: Medal, robloxUserId: string, questId: string)
-	local questData = self:GetQuestData(questId, robloxUserId)
-	local claimedQuests: typeof(questData.quests) = {}
+	assert(robloxUserId, "robloxUserId is required")
+	assert(typeof(robloxUserId) == "number", "robloxUserId must be a number")
 	
+	assert(questId, "questId is required")
+	assert(typeof(questId) == "string", "questId must be a string")
+	
+	local questData = self:GetQuestData(questId, robloxUserId)
+	local claimedQuests: { QuestData } = {}
+
 	if questData.hasMedalUser then
 		for _, quest in next, questData.quests do
 			if quest.id == questId and quest.completed and not quest.claimed then
@@ -306,19 +321,34 @@ function MedalMethods.ValidateAndClaimQuestReward(self: Medal, robloxUserId: str
 			end
 		end
 	end
-	
+
 	for _, quest in next, claimedQuests do
 		self:ClaimQuestReward(questData.userId, quest.id)
 	end
-	
-	return claimedQuests
+
+	return claimedQuests, (questData.hasMedalUser and questData.quests or {}) :: { QuestData }
 end
 
 export type Medal = typeof(Medal.new())
 
 export type MedalConfiguration = {
-	StandardAPIKey: string?;
-	PartnerAPIKey: string?;
+	StandardAPIKey: (string | Secret)?;
+	PartnerAPIKey: (string | Secret)?;
+}
+
+export type QuestData = {
+	claimed: boolean,
+	completed: boolean,
+	id: string,
+	name: string,
+	requirements: {
+		{
+			completed: boolean,
+			completedCount: number,
+			name: string,
+			requiredCount: number
+		}
+	}
 }
 
 return Medal]]></ProtectedString>
