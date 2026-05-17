@@ -2,14 +2,14 @@
 	<Meta name="ExplicitAutoJoints">true</Meta>
 	<External>null</External>
 	<External>nil</External>
-	<Item class="ModuleScript" referent="RBX4A720DBBE9154CC8A16DC325FBDA21D6">
+	<Item class="ModuleScript" referent="RBXC374C776749C4E17B0AB1E79BB2F1F68">
 		<Properties>
 			<Content name="LinkedSource"><null></null></Content>
 			<ProtectedString name="Source"><![CDATA[local highlighter = {}
 local keywords = {
 	lua = {
 		"and","break","do","else","elseif","end","for","function","if","in",
-		"local","not","or","repeat","return","then","until","while",
+		"local","const","not","or","repeat","return","then","until","while",
 
 		"continue","export","type","typeof",
 	},
@@ -78,6 +78,9 @@ local colors = {
 	local_property = Color3.fromRGB(97, 161, 241),
 	type_annotation = Color3.fromRGB(97, 161, 241),
 }
+
+highlighter.keywords = keywords
+highlighter.colors = colors
 
 local function createSet(list: { any })
 	local set = {}
