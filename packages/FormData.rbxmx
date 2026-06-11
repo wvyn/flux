@@ -2,11 +2,11 @@
 	<Meta name="ExplicitAutoJoints">true</Meta>
 	<External>null</External>
 	<External>nil</External>
-	<Item class="ModuleScript" referent="RBXADE27CCB544C4AF4BADA9C643B814B9E">
+	<Item class="ModuleScript" referent="RBXA4473F9AC3A945E5934301D3169BA68E">
 		<Properties>
 			<Content name="LinkedSource"><null></null></Content>
 			<ProtectedString name="Source"><![CDATA[--[[
-Wyverion 2026 (cc)
+Copyright (C) 2026 Wyverion
 
 A lightweight multipart/form-data builder for HTTP requests.
 
