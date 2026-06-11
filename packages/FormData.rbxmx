@@ -7,11 +7,28 @@
 			<Content name="LinkedSource"><null></null></Content>
 			<ProtectedString name="Source"><![CDATA[--[[
 Wyverion 2026 (cc)
+
+A lightweight multipart/form-data builder for HTTP requests.
+
+	This module provides utilities for constructing multipart form payloads,
+	including text fields and file uploads. It automatically manages multipart
+	boundaries, generates the appropriate Content-Type header, and serializes
+	all appended parts into a valid request body.
+
+Usage:
+	local form = FormData.new()
+
+	form:AppendField("username", "Wyverion")
+	form:AppendFile("avatar", "avatar.png", imageData, "image/png")
+
+	local body = form:Build()
+	local contentType = form:GetContentType()
 ]]
 
 const FormData = {}
 const FormDataMethods = {}
 
+-- Creates a new FormData instance.
 function FormData.new(title: string?)
 	return setmetatable({
 		Boundary = `----{title or "FormData"..math.random(100000, 999999)}`,
@@ -19,6 +36,7 @@ function FormData.new(title: string?)
 	}, { __index = FormDataMethods })
 end
 
+-- Appends a standard text field to the multipart payload.
 function FormDataMethods.AppendField(self: FormData, name: string, value: string)
 	local field = {
 		type = "field",
@@ -30,6 +48,7 @@ function FormDataMethods.AppendField(self: FormData, name: string, value: string
 	return field
 end
 
+-- Appends a file field to the multipart payload.
 function FormDataMethods.AppendFile(self: FormData, name: string, filename: string, content: string, contentType: string?)
 	local field = {
 		type = "file",
@@ -43,10 +62,12 @@ function FormDataMethods.AppendFile(self: FormData, name: string, filename: stri
 	return field
 end
 
+-- Returns the Content-Type header value required for the generated multipart payload.
 function FormDataMethods.GetContentType(self: FormData)
 	return `multipart/form-data; boundary={self.Boundary}`
 end
 
+-- Builds and serializes all appended fields and files into a valid multipart/form-data request body.
 function FormDataMethods.Build(self: FormData)
 	local body = {}
 
