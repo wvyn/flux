@@ -1,10 +1,11 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
-    <Meta name="ExplicitAutoJoints">true</Meta>
-    <Item class="ModuleScript" referent="RBXZJJX5RC33PLSYY3HFRZ0W3VA0UVTA3MZ">
-        <Properties>
-            <string name="Name">Welder</string>
-            <string name="ScriptGuid">{4564478c-0dd8-485b-ae4d-7adfbd77ce89}</string>
-            <ProtectedString name="Source"><![CDATA[local Welder = {}
+	<Meta name="ExplicitAutoJoints">true</Meta>
+	<External>null</External>
+	<External>nil</External>
+	<Item class="ModuleScript" referent="RBXF1F99D9FF0C64BEDA66A85220AB67978">
+		<Properties>
+			<Content name="LinkedSource"><null></null></Content>
+			<ProtectedString name="Source"><![CDATA[local Welder = {}
 
 export type WeldType = "Weld" | "WeldConstraint" | "Motor6D"
 function Welder.weldPart(
@@ -22,7 +23,7 @@ function Welder.weldPart(
 		
 		Parent: Instance?,
 	}?
-)
+): Weld | WeldConstraint | Motor6D
 	weldProperties = weldProperties or {}
 	local weld = Instance.new(weldType)
 	weld.Part0 = part0
@@ -79,6 +80,13 @@ function Welder.weldModel(
 end
 
 return Welder]]></ProtectedString>
-        </Properties>
-    </Item>
+			<string name="ScriptGuid">{65BE7F78-E022-40C6-8569-710CE0DEAC08}</string>
+			<BinaryString name="AttributesSerialize"></BinaryString>
+			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+			<bool name="DefinesCapabilities">false</bool>
+			<string name="Name">Welder</string>
+			<int64 name="SourceAssetId">-1</int64>
+			<BinaryString name="Tags"></BinaryString>
+		</Properties>
+	</Item>
 </roblox>
