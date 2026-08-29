@@ -9,8 +9,8 @@
 --!strict
 
 const taskSpawn = task.spawn
-local taskDelay = task.delay
-local taskCancel = task.cancel
+const taskDelay = task.delay
+const taskCancel = task.cancel
 
 const tableFind = table.find
 const tableRemove = table.remove
