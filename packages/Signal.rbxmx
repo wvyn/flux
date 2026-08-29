@@ -2,94 +2,119 @@
 	<Meta name="ExplicitAutoJoints">true</Meta>
 	<External>null</External>
 	<External>nil</External>
-	<Item class="ModuleScript" referent="RBXLDZKZDJIWRZ54WLM81L6JI3NRW9QRRFS">
+	<Item class="ModuleScript" referent="RBX81BA8AE88CE8418589DCA12729E06055">
 		<Properties>
 			<Content name="LinkedSource"><null></null></Content>
-			<ProtectedString name="Source"><![CDATA[local SignalConstructor = {}
-local SignalMethods = {}
+			<ProtectedString name="Source"><![CDATA[--[[ Signal by wyverndayo ]]
+--!strict
 
-local tableRemove = table.remove
-local tableFind = table.find
-
-local coroutineStatus = coroutine.status
-local coroutineRunning = coroutine.running
-local coroutineYield = coroutine.yield
-
+const taskSpawn = task.spawn
 local taskDelay = task.delay
 local taskCancel = task.cancel
 
-function SignalConstructor.new()
-	return setmetatable({ _connections = {} :: { SignalConnection } }, { __index = SignalMethods })
+const tableFind = table.find
+const tableRemove = table.remove
+
+const coroutineStatus = coroutine.status
+const coroutineRunning = coroutine.running
+const coroutineYield = coroutine.yield
+
+--
+
+const SignalConnectionConstructor = {}
+const SignalConnectionMethods = {}
+
+function SignalConnectionConstructor.new<T...>(callback: (T...) -> (...any), connections: { SignalConnection<T...> }): SignalConnection<T...>
+	const SignalConnection = setmetatable({
+		IsConnected = true,
+		Connections = connections,
+		Callback = callback
+	}, { __index = SignalConnectionMethods })
+	return SignalConnection
 end
 
-local taskSpawn = task.spawn
-function SignalMethods:Fire<parameters...>(...: parameters...): parameters...
-	for _, connection in next, self._connections do
-		taskSpawn(connection[1], ...)
-	end; return ...
-end
-
-function SignalMethods:Invoke<parameters...>(...: parameters...): { any }
-	local responses = {}
-	for _, connection in next, self._connections do
-		responses[#responses + 1] = connection[1](...) or false
-	end; return responses
-end
-
-local Connection = {}
-function Connection:Disconnect()
-	local _, connections = unpack(self)
-
-	local connectionIndex = tableFind(connections, self)
+function SignalConnectionMethods.Disconnect<T...>(self: SignalConnection<T...>)
+	if self.IsConnected then
+		(self :: any).IsConnected = false
+	end
+	
+	const connections = self.Connections
+	const connectionIndex = tableFind(connections, self)
 	if connectionIndex then
 		tableRemove(connections, connectionIndex)
 	end
 end
 
-function SignalMethods:Connect(func: () -> (), ...)
-	if ... then
-		local subFunction = func
-		local parameters = {...}
-		func = function() subFunction(unpack(parameters)) end 
-	end
+--
 
-	local connections = self._connections
-	local SignalConnection = setmetatable({ func, connections }, { __index = Connection })
+const SignalConstructor = {}
+const SignalMethods = {}
+
+function SignalConstructor.new<T...>(... : T...): Signal<T...>
+	return setmetatable({
+		Connections = {} :: { SignalConnection<T...> }
+	}, { __index = SignalMethods :: _signalMethods<T...> })
+end
+
+function SignalMethods.Destroy<T...>(self: Signal<T...>)
+	self:DisconnectAll()
+	setmetatable(self, nil)
+end
+
+function SignalMethods.Fire<T...>(self: Signal<T...>, ...: T...): T...
+	for _, connection in next, self.Connections do
+		taskSpawn(connection.Callback, ...)
+	end; return ...
+end
+
+function SignalMethods.Invoke<T...>(self: Signal<T...>, ...: T...): { any }
+	const responses = {}
+	for _, connection in next, self.Connections do
+		responses[#responses + 1] = connection.Callback(...)
+	end; return responses
+end
+
+
+function SignalMethods.Connect<T...>(self: Signal<T...>, callback: (T...) -> (...any))
+	const connections = self.Connections
+	
+	const SignalConnection = SignalConnectionConstructor.new(callback, connections)
 	connections[#connections + 1] = SignalConnection
+	
 	return SignalConnection
 end
 
-function SignalMethods:DisconnectAll()
-	local connections = self._connections
-	for connectionIndex in next, connections do
+function SignalMethods.DisconnectAll<T...>(self: Signal<T...>)
+	const connections = self.Connections
+	for connectionIndex, connection in next, connections do
+		(connection :: any).IsConnected = false
 		connections[connectionIndex] = nil
 	end
 end
 
-function SignalMethods:Wait(timeout: number?)
-	local thread = coroutineRunning()
+function SignalMethods.Wait<T...>(self: Signal<T...>, timeout: number?)
+	const thread = coroutineRunning()
 
-	local connection
+	local connection: SignalConnection<T...>
 
-	local timeoutThread
+	local timeoutThread: thread?
 	if timeout then
 		timeoutThread = taskDelay(timeout, function() 
-			connection:Disconnect(); 
-			connection = nil; 
+			connection:Disconnect() 
+			timeoutThread = nil
 
-			timeoutThread = nil;
-			
 			if coroutineStatus(thread) == "suspended" then
 				taskSpawn(thread)
 			end
 		end)
 	end
 
-	connection = self:Connect(function(...)
+	connection = self:Connect(function(...: T...)
 		connection:Disconnect()
 		if coroutineStatus(thread) == "suspended" then
 			taskSpawn(thread, ...)
 		end
+		
 		if timeoutThread then 
 			taskCancel(timeoutThread);
 			timeoutThread = nil 
@@ -99,51 +124,62 @@ function SignalMethods:Wait(timeout: number?)
 	return coroutineYield()
 end
 
-function SignalMethods:Once(func: () -> (), ...)
-	if ... then
-		local subFunction = func
-		local parameters = {...}
-		func = function() subFunction(unpack(parameters)) end 
-	end
-
-	local connection
-	connection = self:Connect(function(...)
+function SignalMethods.Once<T...>(self: Signal<T...>, callback: (T...) -> (...any))
+	local connection: SignalConnection<T...>
+	connection = self:Connect(function(...: T...)
 		connection:Disconnect()
-		connection = nil
-
-		taskSpawn(func, ...)
+		taskSpawn(callback, ...)
 	end)
 
 	return connection
 end
 
-function SignalMethods:Destroy()
-	self:DisconnectAll()
+--
 
-	local connections = self._connections
-	for i in next, connections do
-		connections[i] = nil
-	end
+export type _signalMethods<T...> = {
+	read Destroy: (self: Signal<T...>) -> (),
+	
+	read Fire: (self: Signal<T...>, T...) -> T...,
+	read Invoke: (self: Signal<T...>, T...) -> { any },
+	
+	read Connect: (self: Signal<T...>, callback: (T...) -> (...any)) -> SignalConnection<T...>,
+	read DisconnectAll: (self: Signal<T...>) -> (),
+	
+	read Wait: (self: Signal<T...>, timeout: number?) -> T...,
+	read Once: (self: Signal<T...>, callback: (T...) -> (...any)) -> SignalConnection<T...>,
+}
 
-	for i in next, self do
-		self[i] = nil
-	end
+export type Signal<T...> = setmetatable<{
+	read Connections: { SignalConnection<T...> },
+}, {
+	__index: _signalMethods<T...>
+}>
 
-	setmetatable(self, nil)
-	return true
-end
+export type _signalConnectionMethods<T...> = {
+	Disconnect: (self: SignalConnection<T...>) -> (),
+}
 
-export type SignalConnection = typeof(Connection)
-export type Signal = typeof(SignalConstructor.new())
+export type SignalConnection<T...> = setmetatable<{
+	read IsConnected: boolean,
+	read Connections: { SignalConnection<T...> },
+
+	read Callback: (T...) -> (...any),
+
+}, {
+	__index: _signalConnectionMethods<T...>
+}>
 
 return SignalConstructor]]></ProtectedString>
-			<string name="ScriptGuid">{7082621e-465f-4556-87d6-084ab6ee9798}</string>
+			<string name="ScriptGuid">{E9EB365A-5E0C-419D-B7AA-8CD04D69AFDE}</string>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 			<bool name="DefinesCapabilities">false</bool>
 			<string name="Name">Signal</string>
 			<int64 name="SourceAssetId">-1</int64>
-			<BinaryString name="Tags"></BinaryString>
+			<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 		</Properties>
 	</Item>
+	<SharedStrings>
+		<SharedString md5="yuZpQdnvvUBOTYh1jqZ2cA=="></SharedString>
+	</SharedStrings>
 </roblox>
