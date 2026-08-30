@@ -2,7 +2,7 @@
 	<Meta name="ExplicitAutoJoints">true</Meta>
 	<External>null</External>
 	<External>nil</External>
-	<Item class="ModuleScript" referent="RBX8DB69924F46E48F99F1882A23FD76F8A">
+	<Item class="ModuleScript" referent="RBX2B8D46745616454C9333E394EB32278D">
 		<Properties>
 			<Content name="LinkedSource"><null></null></Content>
 			<ProtectedString name="Source"><![CDATA[--!strict
@@ -367,7 +367,7 @@ function MouseLockController.OnMouseLockToggled(self: MouseLockController)
 		cameraUtils.restoreMouseIcon()
 	end
 
-	self.mouseLockToggledEvent:Fire()
+	--self.mouseLockToggledEvent:Fire()
 end
 
 function MouseLockController.IsMouseLocked(self: MouseLockController): boolean
@@ -397,11 +397,11 @@ function MouseLockController.EnableMouseLock(self: MouseLockController, enable: 
 		if fFlagUserFixStuckShiftLock then
 			if self.isMouseLocked then
 				self.isMouseLocked = false
-				self.mouseLockToggledEvent:Fire()
+				--self.mouseLockToggledEvent:Fire()
 			end
 		else
 			if self.isMouseLocked then
-				self.mouseLockToggledEvent:Fire()
+				--self.mouseLockToggledEvent:Fire()
 			end
 
 			self.isMouseLocked = false
@@ -424,7 +424,7 @@ export type MouseLockController = typeof(setmetatable(
 	))
 
 return MouseLockController]]></ProtectedString>
-			<string name="ScriptGuid">{85AA4C4A-72AB-4DA6-BECF-BB66E183101F}</string>
+			<string name="ScriptGuid">{FDBD3003-127E-4974-A74E-6E0DCE51B50F}</string>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 			<bool name="DefinesCapabilities">false</bool>
