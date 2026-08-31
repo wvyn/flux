@@ -1,0 +1,228 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+	<Meta name="ExplicitAutoJoints">true</Meta>
+	<External>null</External>
+	<External>nil</External>
+	<Item class="ModuleScript" referent="RBXEE4AF0A3FCE14B4CAD5D84B872999124">
+		<Properties>
+			<Content name="LinkedSource"><null></null></Content>
+			<ProtectedString name="Source"><![CDATA[const NumericalState = require("@self/NumericalState")
+const BooleanState = require("@self/BooleanState")
+
+const StateEffects = {
+	NumericalState = NumericalState,
+	BooleanState = BooleanState
+}
+
+export type NumericalState = NumericalState.NumericalState
+export type NumericalElement = NumericalState.NumericalElement
+
+export type BooleanState = BooleanState.BooleanState
+export type BooleanElement = BooleanState.BooleanElement
+
+return StateEffects]]></ProtectedString>
+			<string name="ScriptGuid">{2C50534E-98EE-48D3-A5E2-52EF3A4C44BB}</string>
+			<BinaryString name="AttributesSerialize"></BinaryString>
+			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+			<bool name="DefinesCapabilities">false</bool>
+			<string name="Name">StateEffect</string>
+			<int64 name="SourceAssetId">-1</int64>
+			<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+		</Properties>
+		<Item class="ModuleScript" referent="RBX7C1AEC0F91EC4AFA905C02F3AB3357BA">
+			<Properties>
+				<Content name="LinkedSource"><null></null></Content>
+				<ProtectedString name="Source"><![CDATA[--!strict
+
+const Signal = require("../Signal")
+
+const NumericalState = {}
+const NumericalStateMethods = {}
+
+function NumericalState.new()
+	return setmetatable({ 
+		Changed = Signal.new() :: Signal.Signal<number>,
+		Values = {} :: { NumericalElement },
+		
+		_lastValue = 0
+	}, { __index = NumericalStateMethods })
+end
+
+function NumericalStateMethods.Destroy(self: NumericalState)
+	self.Changed:Destroy()
+end
+
+function NumericalStateMethods._stepChanged(self: NumericalState)
+	const read = self:Read()
+
+	if read ~= self._lastValue then
+		self.Changed:Fire(read)
+	end
+
+	self._lastValue = read
+	
+	return read
+end
+
+
+function NumericalStateMethods.Add(self: NumericalState, value: number | { Value: number }, duration: number?)
+	local element: NumericalElement = {
+		Read = typeof(value) == "number" and { Value = value } or value :: { Value: number },
+		Start = os.clock(),
+		Duration = duration or -1
+	}
+	
+	if typeof(value) == "Instance" and value:IsA("ValueBase") then
+		value.Changed:Connect(function()
+			self:_stepChanged()
+		end)
+	end
+	
+	self.Values[#self.Values + 1] = element
+	
+	if duration then
+		task.delay(duration, self.Remove, self, element)
+	end
+	
+	self:_stepChanged()
+	return element
+end
+
+function NumericalStateMethods.Remove(self: NumericalState, value: NumericalElement)
+	local index = table.find(self.Values, value)
+	
+	if index then
+		table.remove(self.Values, index)
+	end
+	
+	self:_stepChanged()
+end
+
+function NumericalStateMethods.Read(self: NumericalState)
+	local value = 0
+	
+	for _, v in self.Values do
+		value += v.Read.Value
+	end
+	
+	return value
+end
+
+export type NumericalState = typeof(NumericalState.new())
+export type NumericalElement = {
+	read Read: { Value : number },
+	read Start: number,
+	read Duration: number
+}
+
+return NumericalState]]></ProtectedString>
+				<string name="ScriptGuid">{B4295AEC-C05D-4216-9EBB-0C0F58775DB9}</string>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<string name="Name">NumericalState</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX388C605448C94FFA8D6B589A9FEBAC89">
+			<Properties>
+				<Content name="LinkedSource"><null></null></Content>
+				<ProtectedString name="Source"><![CDATA[--!strict
+
+const Signal = require("../Signal")
+
+const BooleanState = {}
+const BooleanStateMethods = {}
+
+function BooleanState.new()
+	return setmetatable({
+		Changed = Signal.new() :: Signal.Signal<boolean>,
+		Values = {} :: { BooleanElement },
+		
+		_lastValue = false,
+	}, { __index = BooleanStateMethods })
+end
+
+function BooleanStateMethods.Destroy(self: BooleanState)
+	self.Changed:Destroy()
+end
+
+function BooleanStateMethods._stepChanged(self: BooleanState)
+	const read = self:Read()
+	
+	if read ~= self._lastValue then
+		self.Changed:Fire(read)
+	end
+	
+	self._lastValue = read
+	
+	return read
+end
+
+function BooleanStateMethods.Add(self: BooleanState, value: boolean | { Value: boolean }, duration: number?)
+	local element: BooleanElement = {
+		Read = typeof(value) == "boolean" and { Value = value } or value :: { Value: boolean },
+		Start = os.clock(),
+		Duration = duration or -1
+	}
+	
+	if typeof(value) == "Instance" and value:IsA("ValueBase") then
+		value.Changed:Connect(function()
+			self:_stepChanged()
+		end)
+	end
+
+	self.Values[#self.Values + 1] = element
+
+	if duration then
+		task.delay(duration, self.Remove, self, element)
+	end
+
+	self:_stepChanged()
+	return element
+end
+
+function BooleanStateMethods.Remove(self: BooleanState, value: BooleanElement)
+	local index = table.find(self.Values, value)
+
+	if index then
+		table.remove(self.Values, index)
+	end
+	
+	self:_stepChanged()
+end
+
+function BooleanStateMethods.Read(self: BooleanState): boolean
+	local value = false
+
+	for _, v in self.Values do
+		value = value or v.Read.Value
+	end
+
+	return value
+end
+
+export type BooleanState = typeof(BooleanState.new())
+
+export type BooleanElement = {
+	read Read: { Value: boolean },
+	read Start: number,
+	read Duration: number
+}
+
+return BooleanState
+]]></ProtectedString>
+				<string name="ScriptGuid">{65AF54B9-548F-4119-8A5F-63AD8D996311}</string>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<string name="Name">BooleanState</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+			</Properties>
+		</Item>
+	</Item>
+	<SharedStrings>
+		<SharedString md5="yuZpQdnvvUBOTYh1jqZ2cA=="></SharedString>
+	</SharedStrings>
+</roblox>
