@@ -1,0 +1,969 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+	<Meta name="ExplicitAutoJoints">true</Meta>
+	<External>null</External>
+	<External>nil</External>
+	<Item class="ModuleScript" referent="RBX89D4EBEFF33E4AF18A9C7E1716EF230E">
+		<Properties>
+			<Content name="LinkedSource"><null></null></Content>
+			<ProtectedString name="Source"><![CDATA[--[[ Serial by wyverndayo ]]
+
+const Signal = require("./Signal")
+
+const BufferWriter = require("@self/BufferWriter")
+const BufferReader = require("@self/BufferReader")
+const Codec = require("@self/Codec")
+const Links = require("@self/Links")
+const Remotes = require("@self/Remotes")
+require("@self/Network")
+
+const reliableRemoteEvent = Remotes.ReliableRemoteEvent
+const unreliableRemoteEvent = Remotes.UnreliableRemoteEvent
+const remoteFunction = Remotes.RemoteFunction
+const eventFunctionName = Remotes.EventFunctionName
+const eventGlobalFunctionName = Remotes.EventGlobalFunctionName
+const runService = Remotes.RunService
+
+--
+
+const SerialSharedMethods = {}
+
+function SerialSharedMethods.Serialize<data...>(self: SerialServer<data...> | SerialClient<data...>, ...: data...): (buffer, { Instance })
+	const writer = BufferWriter.new()
+	const count = select("#", ...)
+
+	writer:WriteU8(count)
+	for index = 1, count do
+		Codec.WriteValue(writer, (select(index, ...)))
+	end
+
+	return writer:Finalize(), writer.Refs
+end
+
+function SerialSharedMethods.Deserialize<data...>(self: SerialServer<data...> | SerialClient<data...>, rawBuffer: buffer, refs: { Instance }?): data...
+	const reader = BufferReader.new(rawBuffer)
+	const count = reader:ReadU8()
+
+	const results = table.create(count)
+	for index = 1, count do
+		results[index] = Codec.ReadValue(reader, refs)
+	end
+
+	return (table.unpack(results, 1, count) :: any)
+end
+
+--
+
+const SerialServerMethods = setmetatable({}, { __index = SerialSharedMethods })
+
+function SerialServerMethods.SendGlobalTCP<data...>(self: SerialServer<data...>, ...: data...)
+	const serialized, refs = self:Serialize(...)
+	reliableRemoteEvent[eventGlobalFunctionName](reliableRemoteEvent, self.EventId, serialized, refs)
+end
+
+function SerialServerMethods.SendGlobalUDP<data...>(self: SerialServer<data...>, ...: data...)
+	const serialized, refs = self:Serialize(...)
+	unreliableRemoteEvent[eventGlobalFunctionName](unreliableRemoteEvent, self.EventId, serialized, refs)
+end
+
+function SerialServerMethods.SendTCP<data...>(self: SerialServer<data...>, player: Player, ...: data...)
+	const serialized, refs = self:Serialize(...)
+	reliableRemoteEvent[eventFunctionName](reliableRemoteEvent, player, self.EventId, serialized, refs)
+end
+
+function SerialServerMethods.SendUDP<data...>(self: SerialServer<data...>, player: Player, ...: data...)
+	const serialized, refs = self:Serialize(...)
+	unreliableRemoteEvent[eventFunctionName](unreliableRemoteEvent, player, self.EventId, serialized, refs)
+end
+
+function SerialServerMethods.Request<data...>(self: SerialServer<data...>, player: Player, ...: data...): data...
+	const serialized, refs = self:Serialize(...)
+	const responseBuffer, responseRefs = remoteFunction:InvokeClient(player, self.EventId, serialized, refs)
+	return self:Deserialize(responseBuffer, responseRefs)
+end
+
+--
+
+const SerialClientMethods = setmetatable({}, { __index = SerialSharedMethods })
+
+function SerialClientMethods.SendTCP<data...>(self: SerialClient<data...>, ...: data...)
+	const serialized, refs = self:Serialize(...)
+	reliableRemoteEvent[eventFunctionName](reliableRemoteEvent, self.EventId, serialized, refs)
+end
+
+function SerialClientMethods.SendUDP<data...>(self: SerialClient<data...>, ...: data...)
+	const serialized, refs = self:Serialize(...)
+	unreliableRemoteEvent[eventFunctionName](unreliableRemoteEvent, self.EventId, serialized, refs)
+end
+
+function SerialClientMethods.Request<data...>(self: SerialClient<data...>, ...: data...): data...
+	const serialized, refs = self:Serialize(...)
+	const responseBuffer, responseRefs = remoteFunction:InvokeServer(self.EventId, serialized, refs)
+	return self:Deserialize(responseBuffer, responseRefs)
+end
+
+--
+
+const Serial = {
+	_links = Links,
+	
+	Server = {},
+	Client = {}
+}
+
+function Serial.Server.new<data...>(eventId: string): SerialServer<data...>
+	if Links[eventId] then
+		return Links[eventId]
+	end
+
+	local self = setmetatable({
+		EventId = eventId,
+
+		RawReceived = Signal.new() :: Signal.Signal<Player, buffer>,
+		Received = Signal.new() :: Signal.Signal<Player, data...>,
+		Requested = Signal.new() :: Signal.Signal<Player, data...>,
+	}, { __index = SerialServerMethods })
+	
+	Links[eventId] = self
+	return self
+end
+
+function Serial.Client.new<data...>(eventId: string): SerialClient<data...>
+	if Links[eventId] then
+		return Links[eventId]
+	end
+
+	local self = setmetatable({
+		EventId = eventId,
+
+		RawReceived = Signal.new() :: Signal.Signal<buffer>,
+		Received = Signal.new() :: Signal.Signal<data...>,
+		Requested = Signal.new() :: Signal.Signal<data...>,
+	}, { __index = SerialClientMethods })
+
+	Links[eventId] = self
+	return self
+end
+
+--
+
+export type _serialServerMethods<data...> = {
+	read SendGlobalTCP: (self: SerialServer<data...>, data...) -> (),
+	read SendGlobalUDP: (self: SerialServer<data...>, data...) -> (),
+
+	read SendTCP: (self: SerialServer<data...>, player: Player, data...) -> (),
+	read SendUDP: (self: SerialServer<data...>, player: Player, data...) -> (),
+	
+	read Request: (self: SerialServer<data...>, data...) -> data...,
+	
+	read Serialize: (self: SerialServer<data...>, data...) -> (buffer, { Instance }),
+	read Deserialize: (self: SerialServer<data...>, rawBuffer: buffer, refs: { Instance }?) -> data...,
+}
+
+export type _serialClientMethods<data...> = {
+	read SendTCP: (self: SerialClient<data...>, data...) -> (),
+	read SendUDP: (self: SerialClient<data...>, data...) -> (),
+
+	read Request: (self: SerialClient<data...>, data...) -> data...,
+	
+	read Serialize: (self: SerialClient<data...>, data...) -> (buffer, { Instance }),
+	read Deserialize: (self: SerialClient<data...>, rawBuffer: buffer, refs: { Instance }?) -> data...,
+}
+
+export type SerialServer<data...> = setmetatable<{
+	read EventId: string,
+
+	read RawReceived: Signal.Signal<Player, buffer>,
+	read Received: Signal.Signal<Player, data...>,
+	read Requested: Signal.Signal<Player, data...>,
+}, { __index: _serialServerMethods<data...> }>
+
+export type SerialClient<data...> = setmetatable<{
+	read EventId: string,
+
+	read RawReceived: Signal.Signal<buffer>,
+	read Received: Signal.Signal<data...>,
+}, { __index: _serialClientMethods<data...> }>
+
+return Serial
+]]></ProtectedString>
+			<string name="ScriptGuid">{C34C5F11-C61A-4590-A69A-FED0E3EC5309}</string>
+			<BinaryString name="AttributesSerialize"></BinaryString>
+			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+			<bool name="DefinesCapabilities">false</bool>
+			<string name="Name">Serial</string>
+			<int64 name="SourceAssetId">-1</int64>
+			<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+		</Properties>
+		<Item class="ModuleScript" referent="RBXA98157E948F34F2B847D789136B10561">
+			<Properties>
+				<Content name="LinkedSource"><null></null></Content>
+				<ProtectedString name="Source"><![CDATA[const Codec = {}
+
+const TypeTag = table.freeze({
+	Nil = 0,
+	False = 1,
+	True = 2,
+	Integer = 3,
+	Number = 4,
+	String = 5,
+	Array = 6,
+	Map = 7,
+
+	Vector2 = 8,
+	Vector3 = 9,
+	Vector2int16 = 10,
+	Vector3int16 = 11,
+	CFrame = 12,
+	Color3 = 13,
+	BrickColor = 14,
+
+	UDim = 15,
+	UDim2 = 16,
+	Rect = 17,
+	NumberRange = 18,
+	NumberSequence = 19,
+	ColorSequence = 20,
+
+	EnumItem = 21,
+	TweenInfo = 22,
+	DateTime = 23,
+	Ray = 24,
+	Region3 = 25,
+	Region3int16 = 26,
+	Faces = 27,
+	Axes = 28,
+
+	-- Not encoded into the buffer at all -- see the file header comment.
+	Instance = 29,
+})
+
+const NORMAL_IDS = {
+	Enum.NormalId.Top,
+	Enum.NormalId.Bottom,
+	Enum.NormalId.Left,
+	Enum.NormalId.Right,
+	Enum.NormalId.Back,
+	Enum.NormalId.Front,
+}
+
+const AXES = { Enum.Axis.X, Enum.Axis.Y, Enum.Axis.Z }
+
+const MIN_I32 = -2147483648
+const MAX_I32 = 2147483647
+
+function Codec.WriteValue(writer, value: any)
+	const valueType = typeof(value)
+
+	if value == nil then
+		writer:WriteU8(TypeTag.Nil)
+	elseif valueType == "boolean" then
+		writer:WriteU8(value and TypeTag.True or TypeTag.False)
+	elseif valueType == "number" then
+		if value % 1 == 0 and value >= MIN_I32 and value <= MAX_I32 then
+			writer:WriteU8(TypeTag.Integer)
+			writer:WriteI32(value)
+		else
+			writer:WriteU8(TypeTag.Number)
+			writer:WriteF64(value)
+		end
+	elseif valueType == "string" then
+		writer:WriteU8(TypeTag.String)
+		writer:WriteString(value)
+	elseif valueType == "Vector2" then
+		writer:WriteU8(TypeTag.Vector2)
+		writer:WriteF32(value.X)
+		writer:WriteF32(value.Y)
+	elseif valueType == "Vector3" then
+		writer:WriteU8(TypeTag.Vector3)
+		writer:WriteF32(value.X)
+		writer:WriteF32(value.Y)
+		writer:WriteF32(value.Z)
+	elseif valueType == "Vector2int16" then
+		writer:WriteU8(TypeTag.Vector2int16)
+		writer:WriteI16(value.X)
+		writer:WriteI16(value.Y)
+	elseif valueType == "Vector3int16" then
+		writer:WriteU8(TypeTag.Vector3int16)
+		writer:WriteI16(value.X)
+		writer:WriteI16(value.Y)
+		writer:WriteI16(value.Z)
+	elseif valueType == "CFrame" then
+		writer:WriteU8(TypeTag.CFrame)
+		const position = value.Position
+		writer:WriteF32(position.X)
+		writer:WriteF32(position.Y)
+		writer:WriteF32(position.Z)
+		const rx, ry, rz = value:ToOrientation()
+		writer:WriteF32(rx)
+		writer:WriteF32(ry)
+		writer:WriteF32(rz)
+	elseif valueType == "Color3" then
+		writer:WriteU8(TypeTag.Color3)
+		writer:WriteU8(math.floor(value.R * 255 + 0.5))
+		writer:WriteU8(math.floor(value.G * 255 + 0.5))
+		writer:WriteU8(math.floor(value.B * 255 + 0.5))
+	elseif valueType == "BrickColor" then
+		writer:WriteU8(TypeTag.BrickColor)
+		writer:WriteU32(value.Number)
+	elseif valueType == "UDim" then
+		writer:WriteU8(TypeTag.UDim)
+		writer:WriteF32(value.Scale)
+		writer:WriteI32(value.Offset)
+	elseif valueType == "UDim2" then
+		writer:WriteU8(TypeTag.UDim2)
+		writer:WriteF32(value.X.Scale)
+		writer:WriteI32(value.X.Offset)
+		writer:WriteF32(value.Y.Scale)
+		writer:WriteI32(value.Y.Offset)
+	elseif valueType == "Rect" then
+		writer:WriteU8(TypeTag.Rect)
+		writer:WriteF32(value.Min.X)
+		writer:WriteF32(value.Min.Y)
+		writer:WriteF32(value.Max.X)
+		writer:WriteF32(value.Max.Y)
+	elseif valueType == "NumberRange" then
+		writer:WriteU8(TypeTag.NumberRange)
+		writer:WriteF32(value.Min)
+		writer:WriteF32(value.Max)
+	elseif valueType == "NumberSequence" then
+		writer:WriteU8(TypeTag.NumberSequence)
+		const keypoints = value.Keypoints
+		writer:WriteU32(#keypoints)
+		for _, keypoint in keypoints do
+			writer:WriteF32(keypoint.Time)
+			writer:WriteF32(keypoint.Value)
+			writer:WriteF32(keypoint.Envelope)
+		end
+	elseif valueType == "ColorSequence" then
+		writer:WriteU8(TypeTag.ColorSequence)
+		const keypoints = value.Keypoints
+		writer:WriteU32(#keypoints)
+		for _, keypoint in keypoints do
+			writer:WriteF32(keypoint.Time)
+			const color = keypoint.Value
+			writer:WriteU8(math.floor(color.R * 255 + 0.5))
+			writer:WriteU8(math.floor(color.G * 255 + 0.5))
+			writer:WriteU8(math.floor(color.B * 255 + 0.5))
+		end
+	elseif valueType == "EnumItem" then
+		writer:WriteU8(TypeTag.EnumItem)
+		writer:WriteString(tostring(value.EnumType))
+		writer:WriteString(value.Name)
+	elseif valueType == "TweenInfo" then
+		writer:WriteU8(TypeTag.TweenInfo)
+		writer:WriteF32(value.Time)
+		writer:WriteString(value.EasingStyle.Name)
+		writer:WriteString(value.EasingDirection.Name)
+		writer:WriteI32(value.RepeatCount)
+		writer:WriteU8(value.Reverses and 1 or 0)
+		writer:WriteF32(value.DelayTime)
+	elseif valueType == "DateTime" then
+		writer:WriteU8(TypeTag.DateTime)
+		writer:WriteF64(value.UnixTimestampMillis)
+	elseif valueType == "Ray" then
+		writer:WriteU8(TypeTag.Ray)
+		writer:WriteF32(value.Origin.X)
+		writer:WriteF32(value.Origin.Y)
+		writer:WriteF32(value.Origin.Z)
+		writer:WriteF32(value.Direction.X)
+		writer:WriteF32(value.Direction.Y)
+		writer:WriteF32(value.Direction.Z)
+	elseif valueType == "Region3" then
+		writer:WriteU8(TypeTag.Region3)
+		const center = value.CFrame.Position
+		const half = value.Size / 2
+		writer:WriteF32(center.X - half.X)
+		writer:WriteF32(center.Y - half.Y)
+		writer:WriteF32(center.Z - half.Z)
+		writer:WriteF32(center.X + half.X)
+		writer:WriteF32(center.Y + half.Y)
+		writer:WriteF32(center.Z + half.Z)
+	elseif valueType == "Region3int16" then
+		writer:WriteU8(TypeTag.Region3int16)
+		writer:WriteI16(value.Min.X)
+		writer:WriteI16(value.Min.Y)
+		writer:WriteI16(value.Min.Z)
+		writer:WriteI16(value.Max.X)
+		writer:WriteI16(value.Max.Y)
+		writer:WriteI16(value.Max.Z)
+	elseif valueType == "Faces" then
+		writer:WriteU8(TypeTag.Faces)
+		local mask = 0
+		for index, normalId in NORMAL_IDS do
+			if (value :: Faces)[normalId.Name] then
+				mask += bit32.lshift(1, index - 1)
+			end
+		end
+		writer:WriteU8(mask)
+	elseif valueType == "Axes" then
+		writer:WriteU8(TypeTag.Axes)
+		local mask = 0
+		for index, axis in AXES do
+			if (value :: Axes)[axis.Name] then
+				mask += bit32.lshift(1, index - 1)
+			end
+		end
+		writer:WriteU8(mask)
+	elseif valueType == "Instance" then
+		writer:WriteU8(TypeTag.Instance)
+		writer:WriteInstance(value)
+	elseif valueType == "table" then
+		const arrayLength = #value
+		local totalCount = 0
+		local isArray = true
+
+		for key in next, value do
+			totalCount += 1
+			if typeof(key) ~= "number" or key % 1 ~= 0 or key < 1 or key > arrayLength then
+				isArray = false
+			end
+		end
+
+		if isArray and totalCount == arrayLength then
+			writer:WriteU8(TypeTag.Array)
+			writer:WriteU32(arrayLength)
+			for index = 1, arrayLength do
+				Codec.WriteValue(writer, value[index])
+			end
+		else
+			writer:WriteU8(TypeTag.Map)
+			writer:WriteU32(totalCount)
+			for key, mapValue in next, value do
+				Codec.WriteValue(writer, key)
+				Codec.WriteValue(writer, mapValue)
+			end
+		end
+	else
+		error(`Serial: cannot serialize value of type "{valueType}"`)
+	end
+end
+
+function Codec.ReadValue(reader, refs: { Instance }?): any
+	const tag = reader:ReadU8()
+
+	if tag == TypeTag.Nil then
+		return nil
+	elseif tag == TypeTag.False then
+		return false
+	elseif tag == TypeTag.True then
+		return true
+	elseif tag == TypeTag.Integer then
+		return reader:ReadI32()
+	elseif tag == TypeTag.Number then
+		return reader:ReadF64()
+	elseif tag == TypeTag.String then
+		return reader:ReadString()
+	elseif tag == TypeTag.Vector2 then
+		const x = reader:ReadF32()
+		const y = reader:ReadF32()
+		return Vector2.new(x, y)
+	elseif tag == TypeTag.Vector3 then
+		const x = reader:ReadF32()
+		const y = reader:ReadF32()
+		const z = reader:ReadF32()
+		return Vector3.new(x, y, z)
+	elseif tag == TypeTag.Vector2int16 then
+		const x = reader:ReadI16()
+		const y = reader:ReadI16()
+		return Vector2int16.new(x, y)
+	elseif tag == TypeTag.Vector3int16 then
+		const x = reader:ReadI16()
+		const y = reader:ReadI16()
+		const z = reader:ReadI16()
+		return Vector3int16.new(x, y, z)
+	elseif tag == TypeTag.CFrame then
+		const x = reader:ReadF32()
+		const y = reader:ReadF32()
+		const z = reader:ReadF32()
+		const rx = reader:ReadF32()
+		const ry = reader:ReadF32()
+		const rz = reader:ReadF32()
+		return CFrame.new(x, y, z) * CFrame.fromOrientation(rx, ry, rz)
+	elseif tag == TypeTag.Color3 then
+		const r = reader:ReadU8()
+		const g = reader:ReadU8()
+		const b = reader:ReadU8()
+		return Color3.fromRGB(r, g, b)
+	elseif tag == TypeTag.BrickColor then
+		return BrickColor.new(reader:ReadU32())
+	elseif tag == TypeTag.UDim then
+		const scale = reader:ReadF32()
+		const offset = reader:ReadI32()
+		return UDim.new(scale, offset)
+	elseif tag == TypeTag.UDim2 then
+		const xScale = reader:ReadF32()
+		const xOffset = reader:ReadI32()
+		const yScale = reader:ReadF32()
+		const yOffset = reader:ReadI32()
+		return UDim2.new(xScale, xOffset, yScale, yOffset)
+	elseif tag == TypeTag.Rect then
+		const minX = reader:ReadF32()
+		const minY = reader:ReadF32()
+		const maxX = reader:ReadF32()
+		const maxY = reader:ReadF32()
+		return Rect.new(minX, minY, maxX, maxY)
+	elseif tag == TypeTag.NumberRange then
+		const min = reader:ReadF32()
+		const max = reader:ReadF32()
+		return NumberRange.new(min, max)
+	elseif tag == TypeTag.NumberSequence then
+		const count = reader:ReadU32()
+		const keypoints = table.create(count)
+		for index = 1, count do
+			const time = reader:ReadF32()
+			const value = reader:ReadF32()
+			const envelope = reader:ReadF32()
+			keypoints[index] = NumberSequenceKeypoint.new(time, value, envelope)
+		end
+		return NumberSequence.new(keypoints)
+	elseif tag == TypeTag.ColorSequence then
+		const count = reader:ReadU32()
+		const keypoints = table.create(count)
+		for index = 1, count do
+			const time = reader:ReadF32()
+			const r = reader:ReadU8()
+			const g = reader:ReadU8()
+			const b = reader:ReadU8()
+			keypoints[index] = ColorSequenceKeypoint.new(time, Color3.fromRGB(r, g, b))
+		end
+		return ColorSequence.new(keypoints)
+	elseif tag == TypeTag.EnumItem then
+		const enumTypeName = reader:ReadString()
+		const itemName = reader:ReadString()
+		return (Enum :: any)[enumTypeName][itemName]
+	elseif tag == TypeTag.TweenInfo then
+		const time = reader:ReadF32()
+		const easingStyle = reader:ReadString()
+		const easingDirection = reader:ReadString()
+		const repeatCount = reader:ReadI32()
+		const reverses = reader:ReadU8() == 1
+		const delayTime = reader:ReadF32()
+		return TweenInfo.new(
+			time,
+			(Enum.EasingStyle :: any)[easingStyle],
+			(Enum.EasingDirection :: any)[easingDirection],
+			repeatCount,
+			reverses,
+			delayTime
+		)
+	elseif tag == TypeTag.DateTime then
+		return DateTime.fromUnixTimestampMillis(reader:ReadF64())
+	elseif tag == TypeTag.Ray then
+		const ox = reader:ReadF32()
+		const oy = reader:ReadF32()
+		const oz = reader:ReadF32()
+		const dx = reader:ReadF32()
+		const dy = reader:ReadF32()
+		const dz = reader:ReadF32()
+		return Ray.new(Vector3.new(ox, oy, oz), Vector3.new(dx, dy, dz))
+	elseif tag == TypeTag.Region3 then
+		const minX = reader:ReadF32()
+		const minY = reader:ReadF32()
+		const minZ = reader:ReadF32()
+		const maxX = reader:ReadF32()
+		const maxY = reader:ReadF32()
+		const maxZ = reader:ReadF32()
+		return Region3.new(Vector3.new(minX, minY, minZ), Vector3.new(maxX, maxY, maxZ))
+	elseif tag == TypeTag.Region3int16 then
+		const minX = reader:ReadI16()
+		const minY = reader:ReadI16()
+		const minZ = reader:ReadI16()
+		const maxX = reader:ReadI16()
+		const maxY = reader:ReadI16()
+		const maxZ = reader:ReadI16()
+		return Region3int16.new(Vector3int16.new(minX, minY, minZ), Vector3int16.new(maxX, maxY, maxZ))
+	elseif tag == TypeTag.Faces then
+		const mask = reader:ReadU8()
+		const present = {}
+		for index, normalId in NORMAL_IDS do
+			if bit32.band(mask, bit32.lshift(1, index - 1)) ~= 0 then
+				present[#present + 1] = normalId
+			end
+		end
+		return Faces.new(table.unpack(present))
+	elseif tag == TypeTag.Axes then
+		const mask = reader:ReadU8()
+		const present = {}
+		for index, axis in AXES do
+			if bit32.band(mask, bit32.lshift(1, index - 1)) ~= 0 then
+				present[#present + 1] = axis
+			end
+		end
+		return Axes.new(table.unpack(present))
+	elseif tag == TypeTag.Instance then
+		const index = reader:ReadU32()
+		return refs and refs[index] or nil
+	elseif tag == TypeTag.Array then
+		const length = reader:ReadU32()
+		const result = table.create(length)
+		for index = 1, length do
+			result[index] = Codec.ReadValue(reader, refs)
+		end
+		return result
+	elseif tag == TypeTag.Map then
+		const count = reader:ReadU32()
+		const result = {}
+		for _ = 1, count do
+			const key = Codec.ReadValue(reader, refs)
+			const mapValue = Codec.ReadValue(reader, refs)
+			result[key] = mapValue
+		end
+		return result
+	else
+		error(`Serial: unknown type tag {tag}`)
+	end
+end
+
+return Codec
+]]></ProtectedString>
+				<string name="ScriptGuid">{758C0965-4B1C-4F40-8828-A3AB09898967}</string>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<string name="Name">Codec</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBXB70E40316A034E13B420A974FCF48437">
+			<Properties>
+				<Content name="LinkedSource"><null></null></Content>
+				<ProtectedString name="Source"><![CDATA[--!strict
+
+const BufferWriter = {}
+const BufferWriterMethods = {}
+
+function BufferWriter.new(capacity: number?): BufferWriter
+	return setmetatable({
+		Buffer = buffer.create(capacity or 64),
+		Length = 0,
+		Refs = {} :: { Instance },
+	}, { __index = BufferWriterMethods })
+end
+
+function BufferWriterMethods.EnsureCapacity(self: BufferWriter, extra: number)
+	const required = self.Length + extra
+	const capacity = buffer.len(self.Buffer)
+
+	if required > capacity then
+		local newCapacity = capacity * 2
+		while newCapacity < required do
+			newCapacity *= 2
+		end
+
+		const newBuffer = buffer.create(newCapacity)
+		buffer.copy(newBuffer, 0, self.Buffer, 0, self.Length)
+		self.Buffer = newBuffer
+	end
+end
+
+function BufferWriterMethods.WriteU8(self: BufferWriter, value: number)
+	self:EnsureCapacity(1)
+	buffer.writeu8(self.Buffer, self.Length, value)
+	self.Length += 1
+end
+
+function BufferWriterMethods.WriteI16(self: BufferWriter, value: number)
+	self:EnsureCapacity(2)
+	buffer.writei16(self.Buffer, self.Length, value)
+	self.Length += 2
+end
+
+function BufferWriterMethods.WriteU32(self: BufferWriter, value: number)
+	self:EnsureCapacity(4)
+	buffer.writeu32(self.Buffer, self.Length, value)
+	self.Length += 4
+end
+
+function BufferWriterMethods.WriteI32(self: BufferWriter, value: number)
+	self:EnsureCapacity(4)
+	buffer.writei32(self.Buffer, self.Length, value)
+	self.Length += 4
+end
+
+function BufferWriterMethods.WriteF32(self: BufferWriter, value: number)
+	self:EnsureCapacity(4)
+	buffer.writef32(self.Buffer, self.Length, value)
+	self.Length += 4
+end
+
+function BufferWriterMethods.WriteF64(self: BufferWriter, value: number)
+	self:EnsureCapacity(8)
+	buffer.writef64(self.Buffer, self.Length, value)
+	self.Length += 8
+end
+
+function BufferWriterMethods.WriteString(self: BufferWriter, value: string)
+	const length = #value
+	self:WriteU32(length)
+	self:EnsureCapacity(length)
+	buffer.writestring(self.Buffer, self.Length, value)
+	self.Length += length
+end
+
+function BufferWriterMethods.WriteInstance(self: BufferWriter, value: Instance)
+	const refs = self.Refs
+	refs[#refs + 1] = value
+	self:WriteU32(#refs)
+end
+
+function BufferWriterMethods.Finalize(self: BufferWriter): buffer
+	const final = buffer.create(self.Length)
+	buffer.copy(final, 0, self.Buffer, 0, self.Length)
+	return final
+end
+
+export type BufferWriter = setmetatable<{
+	Buffer: buffer,
+	Length: number,
+	Refs: { Instance },
+}, { __index: typeof(BufferWriterMethods) }>
+
+return BufferWriter
+]]></ProtectedString>
+				<string name="ScriptGuid">{8FEB8F12-DBD2-45AB-BF60-587F60179CEB}</string>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<string name="Name">BufferWriter</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX450EF7B7F9D540119DE6C77616AADDD4">
+			<Properties>
+				<Content name="LinkedSource"><null></null></Content>
+				<ProtectedString name="Source"><![CDATA[--!strict
+
+const BufferReader = {}
+const BufferReaderMethods = {}
+
+function BufferReader.new(sourceBuffer: buffer): BufferReader
+	return setmetatable({
+		Buffer = sourceBuffer,
+		Position = 0,
+	}, { __index = BufferReaderMethods })
+end
+
+function BufferReaderMethods.ReadU8(self: BufferReader): number
+	const value = buffer.readu8(self.Buffer, self.Position)
+	self.Position += 1
+	return value
+end
+
+function BufferReaderMethods.ReadI16(self: BufferReader): number
+	const value = buffer.readi16(self.Buffer, self.Position)
+	self.Position += 2
+	return value
+end
+
+function BufferReaderMethods.ReadU32(self: BufferReader): number
+	const value = buffer.readu32(self.Buffer, self.Position)
+	self.Position += 4
+	return value
+end
+
+function BufferReaderMethods.ReadI32(self: BufferReader): number
+	const value = buffer.readi32(self.Buffer, self.Position)
+	self.Position += 4
+	return value
+end
+
+function BufferReaderMethods.ReadF32(self: BufferReader): number
+	const value = buffer.readf32(self.Buffer, self.Position)
+	self.Position += 4
+	return value
+end
+
+function BufferReaderMethods.ReadF64(self: BufferReader): number
+	const value = buffer.readf64(self.Buffer, self.Position)
+	self.Position += 8
+	return value
+end
+
+function BufferReaderMethods.ReadString(self: BufferReader): string
+	const length = self:ReadU32()
+	const value = buffer.readstring(self.Buffer, self.Position, length)
+	self.Position += length
+	return value
+end
+
+export type BufferReader = setmetatable<{
+	Buffer: buffer,
+	Position: number,
+}, { __index: typeof(BufferReaderMethods) }>
+
+return BufferReader
+]]></ProtectedString>
+				<string name="ScriptGuid">{65AB346A-0FF8-4818-86CA-9E51D4886F39}</string>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<string name="Name">BufferReader</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX35997E23AED24E7E96E2EFD17AD20A5D">
+			<Properties>
+				<Content name="LinkedSource"><null></null></Content>
+				<ProtectedString name="Source"><![CDATA[--!strict
+
+const runService = game:GetService("RunService")
+
+const eventFunctionName = runService:IsClient() and "FireServer" or "FireClient"
+const eventGlobalFunctionName = runService:IsClient() and "FireServer" or "FireAllClients"
+
+const reliableRemoteEvent = script:WaitForChild("ReliableRemoteEvent")
+local unreliableRemoteEvent = script:WaitForChild("UnreliableRemoteEvent")
+local remoteFunction = script:WaitForChild("RemoteFunction")
+
+return {
+	RunService = runService,
+
+	EventFunctionName = eventFunctionName,
+	EventGlobalFunctionName = eventGlobalFunctionName,
+
+	ReliableRemoteEvent = reliableRemoteEvent,
+	UnreliableRemoteEvent = unreliableRemoteEvent,
+	RemoteFunction = remoteFunction,
+}
+]]></ProtectedString>
+				<string name="ScriptGuid">{C6A78CCB-7A34-4881-A72F-7FA3BF3E6E48}</string>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<string name="Name">Remotes</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+			</Properties>
+			<Item class="RemoteFunction" referent="RBXA7E091AEDA294CAD9F78DB04F508342B">
+				<Properties>
+					<BinaryString name="AttributesSerialize"></BinaryString>
+					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+					<bool name="DefinesCapabilities">false</bool>
+					<string name="Name">RemoteFunction</string>
+					<int64 name="SourceAssetId">-1</int64>
+					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+				</Properties>
+			</Item>
+			<Item class="RemoteEvent" referent="RBX043C785B271C4432849366E1A2831D00">
+				<Properties>
+					<BinaryString name="AttributesSerialize"></BinaryString>
+					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+					<bool name="DefinesCapabilities">false</bool>
+					<string name="Name">ReliableRemoteEvent</string>
+					<int64 name="SourceAssetId">-1</int64>
+					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+				</Properties>
+			</Item>
+			<Item class="UnreliableRemoteEvent" referent="RBX4DE2BEE8EEE2469AB35C64BD6AC5F202">
+				<Properties>
+					<BinaryString name="AttributesSerialize"></BinaryString>
+					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+					<bool name="DefinesCapabilities">false</bool>
+					<string name="Name">UnreliableRemoteEvent</string>
+					<int64 name="SourceAssetId">-1</int64>
+					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+				</Properties>
+			</Item>
+		</Item>
+		<Item class="ModuleScript" referent="RBXD2D7DDFD8A9A4E4E985205606D467C2E">
+			<Properties>
+				<Content name="LinkedSource"><null></null></Content>
+				<ProtectedString name="Source"><![CDATA[const Remotes = require("./Remotes")
+const Links = require("./Links")
+
+const runService = Remotes.RunService
+const reliableRemoteEvent = Remotes.ReliableRemoteEvent
+const unreliableRemoteEvent = Remotes.UnreliableRemoteEvent
+const remoteFunction = Remotes.RemoteFunction
+
+if runService:IsServer() then
+	const function onReliableEvent(player: Player, eventId: string, rawBuffer: buffer, refs: { Instance }?)
+		const self = Links[eventId]
+		if not self then
+			return
+		end
+
+		self.RawReceived:Fire(player, rawBuffer)
+		self.Received:Fire(player, self:Deserialize(rawBuffer, refs))
+	end
+
+	reliableRemoteEvent.OnServerEvent:Connect(onReliableEvent)
+	unreliableRemoteEvent.OnServerEvent:Connect(onReliableEvent)
+
+	remoteFunction.OnServerInvoke = function(player: Player, eventId: string, rawBuffer: buffer, refs: { Instance }?): ...any
+		const self = Links[eventId]
+		if not self then
+			return buffer.create(0)
+		end
+
+		const responses = self.Requested:Invoke(player, self:Deserialize(rawBuffer, refs))
+		if responses[1] == nil then
+			return buffer.create(0)
+		end
+
+		const responseBuffer, responseRefs = self:Serialize(responses[1])
+		return responseBuffer, responseRefs
+	end
+else
+	const function onReliableEvent(eventId: string, rawBuffer: buffer, refs: { Instance }?)
+		const self = Links[eventId]
+		if not self then
+			return
+		end
+
+		self.RawReceived:Fire(rawBuffer)
+		self.Received:Fire(self:Deserialize(rawBuffer, refs))
+	end
+	
+	remoteFunction.OnClientInvoke = function(player: Player, eventId: string, rawBuffer: buffer, refs: { Instance }?): ...any
+		const self = Links[eventId]
+		if not self then
+			return buffer.create(0)
+		end
+
+		const responses = self.Requested:Invoke(player, self:Deserialize(rawBuffer, refs))
+		if responses[1] == nil then
+			return buffer.create(0)
+		end
+
+		const responseBuffer, responseRefs = self:Serialize(responses[1])
+		return responseBuffer, responseRefs
+	end
+
+	reliableRemoteEvent.OnClientEvent:Connect(onReliableEvent)
+	unreliableRemoteEvent.OnClientEvent:Connect(onReliableEvent)
+end
+
+return true
+]]></ProtectedString>
+				<string name="ScriptGuid">{853A437A-E79F-44AF-80BC-C490478424A8}</string>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<string name="Name">Network</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX1F986BE3552E47F3AB0FC3D49E6DEB08">
+			<Properties>
+				<Content name="LinkedSource"><null></null></Content>
+				<ProtectedString name="Source"><![CDATA[return {} :: { [string]: any }
+]]></ProtectedString>
+				<string name="ScriptGuid">{AB6D75FD-A871-4B57-A904-B01DC01D9357}</string>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<string name="Name">Links</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+			</Properties>
+		</Item>
+	</Item>
+	<SharedStrings>
+		<SharedString md5="yuZpQdnvvUBOTYh1jqZ2cA=="></SharedString>
+	</SharedStrings>
+</roblox>
