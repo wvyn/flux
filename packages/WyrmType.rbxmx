@@ -1,10 +1,11 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
-    <Meta name="ExplicitAutoJoints">true</Meta>
-    <Item class="ModuleScript" referent="RBXYLV3PAK8REJWPUBPBNLLX6V4BMCUP1CN">
-        <Properties>
-            <string name="Name">WyrmType</string>
-            <string name="ScriptGuid">{26ddc96c-597c-490b-9a55-058b319878b9}</string>
-            <ProtectedString name="Source"><![CDATA[--!strict
+	<Meta name="ExplicitAutoJoints">true</Meta>
+	<External>null</External>
+	<External>nil</External>
+	<Item class="ModuleScript" referent="RBX9F4E79E45932481A9CE2E6882C2F7CA7">
+		<Properties>
+			<Content name="LinkedSource"><null></null></Content>
+			<ProtectedString name="Source"><![CDATA[--!strict
 
 local WyrmType = {}
 
@@ -18,7 +19,59 @@ export type function getChildren(ty: type)
 	return if union then union else types.singleton(nil)
 end
 
-return WyrmType]]></ProtectedString>
-        </Properties>
-    </Item>
+export type function findParentOf(container: type, keyword: type)
+	local target = keyword:value()
+
+	local function collect(t: type, out: { [type]: type })
+		if t.tag == "table" or t.tag == "class" or t.tag == "extern" then
+			for name, prop in t:properties() do
+				local value = prop.read or prop.write
+				if name:value() ~= "Parent" and value then
+					out[name] = value
+				end
+			end
+		elseif t.tag == "intersection" then
+			for _, part in t:components() do
+				collect(part, out)
+			end
+		end
+	end
+
+	local packs = {}
+	collect(container, packs)
+
+	local union = nil
+	for packName, packType in packs do
+		local packChildren = {}
+		collect(packType, packChildren)
+
+		for childName in packChildren do
+			if childName:value() == target then
+				union = if union then types.unionof(union, packName) else packName
+				break
+			end
+		end
+	end
+
+	return if union then union else types.singleton(nil)
+end
+
+return WyrmType
+
+
+return WyrmType
+
+]]></ProtectedString>
+			<string name="ScriptGuid">{B98B15FA-8594-4115-921B-8EBC6876A06C}</string>
+			<BinaryString name="AttributesSerialize"></BinaryString>
+			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+			<bool name="DefinesCapabilities">false</bool>
+			<string name="Name">WyrmType</string>
+			<int64 name="SourceAssetId">-1</int64>
+			<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+		</Properties>
+	</Item>
+	<SharedStrings>
+		<SharedString md5="yuZpQdnvvUBOTYh1jqZ2cA=="></SharedString>
+	</SharedStrings>
 </roblox>
