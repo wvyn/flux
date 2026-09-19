@@ -9,6 +9,7 @@
 
 local WyrmType = {}
 
+--- Returns a union of an instance's child names
 export type function getChildren(ty: type)
 	local union = nil
 	for property in ty:properties() do
@@ -19,31 +20,33 @@ export type function getChildren(ty: type)
 	return if union then union else types.singleton(nil)
 end
 
+--- collects child name -> type pairs from table, class, or intersection types into `out`
+type function _collect(t: type, out: { [type]: type })
+	if t.tag == "table" or t.tag == "class" or t.tag == "extern" then
+		for name, prop in t:properties() do
+			local value = prop.read or prop.write
+			if name:value() ~= "Parent" and value then
+				out[name] = value
+			end
+		end
+	elseif t.tag == "intersection" then
+		for _, part in t:components() do
+			_collect(part, out)
+		end
+	end
+end
+
+-- Returns the name of each child of `container` that has a child named `keyword`
 export type function findParentOf(container: type, keyword: type)
 	local target = keyword:value()
 
-	local function collect(t: type, out: { [type]: type })
-		if t.tag == "table" or t.tag == "class" or t.tag == "extern" then
-			for name, prop in t:properties() do
-				local value = prop.read or prop.write
-				if name:value() ~= "Parent" and value then
-					out[name] = value
-				end
-			end
-		elseif t.tag == "intersection" then
-			for _, part in t:components() do
-				collect(part, out)
-			end
-		end
-	end
-
 	local packs = {}
-	collect(container, packs)
+	_collect(container, packs)
 
 	local union = nil
 	for packName, packType in packs do
 		local packChildren = {}
-		collect(packType, packChildren)
+		_collect(packType, packChildren)
 
 		for childName in packChildren do
 			if childName:value() == target then
@@ -56,8 +59,45 @@ export type function findParentOf(container: type, keyword: type)
 	return if union then union else types.singleton(nil)
 end
 
-return WyrmType
+-- hasChild returns true or false
+export type function hasChild(ty: type, keyword: type)
+	local children = {}
+	_collect(ty, children)
+	for name in children do
+		if name:value() == keyword:value() then
+			return types.singleton(true)
+		end
+	end
+	return types.singleton(false)
+end
 
+-- getChildTypes returns the instance types of the children rather than their names
+export type function getChildTypes(ty: type)
+	local children = {}
+	_collect(ty, children)
+	local union = nil
+	for _, childType in children do
+		union = if union then types.unionof(union, childType) else childType
+	end
+	return union or types.singleton(nil)
+end
+
+-- childMap builds a table type mapping each pack to its children's names
+export type function childMap(ty: type)
+	local packs = {}
+	_collect(ty, packs)
+	local result = types.newtable()
+	for packName, packType in packs do
+		local children = {}
+		_collect(packType, children)
+		local union = nil
+		for name in children do
+			union = if union then types.unionof(union, name) else name
+		end
+		result:setproperty(packName, union or types.singleton(nil))
+	end
+	return result
+end
 
 return WyrmType
 
