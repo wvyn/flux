@@ -2,7 +2,7 @@
 	<Meta name="ExplicitAutoJoints">true</Meta>
 	<External>null</External>
 	<External>nil</External>
-	<Item class="ModuleScript" referent="RBXEE4AF0A3FCE14B4CAD5D84B872999124">
+	<Item class="ModuleScript" referent="RBXFA518F5DB8A245C3893CCB32BE3F9486">
 		<Properties>
 			<Content name="LinkedSource"><null></null></Content>
 			<ProtectedString name="Source"><![CDATA[const NumericalState = require("@self/NumericalState")
@@ -20,15 +20,16 @@ export type BooleanState = BooleanState.BooleanState
 export type BooleanElement = BooleanState.BooleanElement
 
 return StateEffects]]></ProtectedString>
-			<string name="ScriptGuid">{2C50534E-98EE-48D3-A5E2-52EF3A4C44BB}</string>
-			<BinaryString name="AttributesSerialize"></BinaryString>
+			<string name="ScriptGuid">{AF82CBDF-AF46-48EC-84D8-052EAAD90450}</string>
+			<BinaryString name="AttributesSerialize"><![CDATA[AQAAAAUAAABfZmx1eAInAAAAMXx3dnluL2ZsdXgvU3RhdGVFZmZlY3RAbWFpbnwxNzg4MTM3
+ODg1]]></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 			<bool name="DefinesCapabilities">false</bool>
 			<string name="Name">StateEffect</string>
 			<int64 name="SourceAssetId">-1</int64>
 			<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 		</Properties>
-		<Item class="ModuleScript" referent="RBX7C1AEC0F91EC4AFA905C02F3AB3357BA">
+		<Item class="ModuleScript" referent="RBX1AFE6210D32C41A499D7D512D03F3D33">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[--!strict
@@ -39,16 +40,22 @@ const NumericalState = {}
 const NumericalStateMethods = {}
 
 function NumericalState.new()
-	return setmetatable({ 
+	return setmetatable({
 		Changed = Signal.new() :: Signal.Signal<number>,
+		EffectAdded = Signal.new() :: Signal.Signal<NumericalElement>,
+		EffectRemoved = Signal.new() :: Signal.Signal<NumericalElement>,
 		Values = {} :: { NumericalElement },
-		
-		_lastValue = 0
+
+		_lastValue = 0,
+		_destroyed = false,
 	}, { __index = NumericalStateMethods })
 end
 
 function NumericalStateMethods.Destroy(self: NumericalState)
+	self._destroyed = true
 	self.Changed:Destroy()
+	self.EffectAdded:Destroy()
+	self.EffectRemoved:Destroy()
 end
 
 function NumericalStateMethods._stepChanged(self: NumericalState)
@@ -59,7 +66,7 @@ function NumericalStateMethods._stepChanged(self: NumericalState)
 	end
 
 	self._lastValue = read
-	
+
 	return read
 end
 
@@ -70,40 +77,50 @@ function NumericalStateMethods.Add(self: NumericalState, value: number | { Value
 		Start = os.clock(),
 		Duration = duration or -1
 	}
-	
+
+	if self._destroyed then
+		return element
+	end
+
 	if typeof(value) == "Instance" and value:IsA("ValueBase") then
 		value.Changed:Connect(function()
 			self:_stepChanged()
 		end)
 	end
-	
+
 	self.Values[#self.Values + 1] = element
-	
+
 	if duration then
 		task.delay(duration, self.Remove, self, element)
 	end
-	
+
+	self.EffectAdded:Fire(element)
 	self:_stepChanged()
 	return element
 end
 
 function NumericalStateMethods.Remove(self: NumericalState, value: NumericalElement)
+	if self._destroyed then
+		return
+	end
+
 	local index = table.find(self.Values, value)
-	
+
 	if index then
 		table.remove(self.Values, index)
+		self.EffectRemoved:Fire(value)
 	end
-	
+
 	self:_stepChanged()
 end
 
 function NumericalStateMethods.Read(self: NumericalState)
 	local value = 0
-	
+
 	for _, v in self.Values do
 		value += v.Read.Value
 	end
-	
+
 	return value
 end
 
@@ -114,8 +131,9 @@ export type NumericalElement = {
 	read Duration: number
 }
 
-return NumericalState]]></ProtectedString>
-				<string name="ScriptGuid">{B4295AEC-C05D-4216-9EBB-0C0F58775DB9}</string>
+return NumericalState
+]]></ProtectedString>
+				<string name="ScriptGuid">{BC185BDF-D146-4A08-96DF-6F96168CA443}</string>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
@@ -124,7 +142,7 @@ return NumericalState]]></ProtectedString>
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX388C605448C94FFA8D6B589A9FEBAC89">
+		<Item class="ModuleScript" referent="RBX6DE8C82AE9F84545B79FD78A7A49E40C">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[--!strict
@@ -137,25 +155,31 @@ const BooleanStateMethods = {}
 function BooleanState.new()
 	return setmetatable({
 		Changed = Signal.new() :: Signal.Signal<boolean>,
+		EffectAdded = Signal.new() :: Signal.Signal<BooleanElement>,
+		EffectRemoved = Signal.new() :: Signal.Signal<BooleanElement>,
 		Values = {} :: { BooleanElement },
-		
+
 		_lastValue = false,
+		_destroyed = false,
 	}, { __index = BooleanStateMethods })
 end
 
 function BooleanStateMethods.Destroy(self: BooleanState)
+	self._destroyed = true
 	self.Changed:Destroy()
+	self.EffectAdded:Destroy()
+	self.EffectRemoved:Destroy()
 end
 
 function BooleanStateMethods._stepChanged(self: BooleanState)
 	const read = self:Read()
-	
+
 	if read ~= self._lastValue then
 		self.Changed:Fire(read)
 	end
-	
+
 	self._lastValue = read
-	
+
 	return read
 end
 
@@ -165,7 +189,11 @@ function BooleanStateMethods.Add(self: BooleanState, value: boolean | { Value: b
 		Start = os.clock(),
 		Duration = duration or -1
 	}
-	
+
+	if self._destroyed then
+		return element
+	end
+
 	if typeof(value) == "Instance" and value:IsA("ValueBase") then
 		value.Changed:Connect(function()
 			self:_stepChanged()
@@ -178,17 +206,23 @@ function BooleanStateMethods.Add(self: BooleanState, value: boolean | { Value: b
 		task.delay(duration, self.Remove, self, element)
 	end
 
+	self.EffectAdded:Fire(element)
 	self:_stepChanged()
 	return element
 end
 
 function BooleanStateMethods.Remove(self: BooleanState, value: BooleanElement)
+	if self._destroyed then
+		return
+	end
+
 	local index = table.find(self.Values, value)
 
 	if index then
 		table.remove(self.Values, index)
+		self.EffectRemoved:Fire(value)
 	end
-	
+
 	self:_stepChanged()
 end
 
@@ -212,7 +246,7 @@ export type BooleanElement = {
 
 return BooleanState
 ]]></ProtectedString>
-				<string name="ScriptGuid">{65AF54B9-548F-4119-8A5F-63AD8D996311}</string>
+				<string name="ScriptGuid">{E490BECA-D6AD-4378-BC6A-1C2D437AB198}</string>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
