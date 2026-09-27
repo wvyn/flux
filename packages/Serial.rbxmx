@@ -2,7 +2,7 @@
 	<Meta name="ExplicitAutoJoints">true</Meta>
 	<External>null</External>
 	<External>nil</External>
-	<Item class="ModuleScript" referent="RBX89D4EBEFF33E4AF18A9C7E1716EF230E">
+	<Item class="ModuleScript" referent="RBXF3BBC77165E34108A22EAF876C10C101">
 		<Properties>
 			<Content name="LinkedSource"><null></null></Content>
 			<ProtectedString name="Source"><![CDATA[--[[ Serial by wyverndayo ]]
@@ -12,16 +12,170 @@ const Signal = require("./Signal")
 const BufferWriter = require("@self/BufferWriter")
 const BufferReader = require("@self/BufferReader")
 const Codec = require("@self/Codec")
-const Links = require("@self/Links")
 const Remotes = require("@self/Remotes")
-require("@self/Network")
+const Security = require("@self/Security")
+const Network = require("@self/Network")
+
+const runService = game:GetService("RunService")
+const players = game:GetService("Players")
 
 const reliableRemoteEvent = Remotes.ReliableRemoteEvent
 const unreliableRemoteEvent = Remotes.UnreliableRemoteEvent
-const remoteFunction = Remotes.RemoteFunction
-const eventFunctionName = Remotes.EventFunctionName
-const eventGlobalFunctionName = Remotes.EventGlobalFunctionName
-const runService = Remotes.RunService
+
+const Kind = Network.Kind
+
+--[[
+	Signal implementations vary in what they call their teardown method --
+	try the common names rather than assuming one.
+]]
+const function destroySignal(signal: any)
+	if not signal then
+		return
+	elseif type(signal.Destroy) == "function" then
+		signal:Destroy()
+	elseif type(signal.DisconnectAll) == "function" then
+		signal:DisconnectAll()
+	end
+end
+
+--[[
+	Registers the calling thread as waiting on a response and returns the
+	request id to send. The thread is resumed by resolveRequest with the
+	response values, or with nothing on timeout / Destroy / player leaving.
+]]
+const function trackRequest(self: any, player: Player?): number
+	const requestId = Network.NextRequestId()
+	const thread = coroutine.running()
+
+	self._pending[requestId] = {
+		Thread = thread,
+		Player = player,
+		Timeout = task.delay(self.RequestTimeout or Network.DefaultRequestTimeout, function()
+			if self._pending[requestId] then
+				self._pending[requestId] = nil
+				task.spawn(thread)
+			end
+		end),
+	}
+
+	return requestId
+end
+
+const function cancelRequest(self: any, requestId: number)
+	const pending = self._pending[requestId]
+	self._pending[requestId] = nil
+	task.cancel(pending.Timeout)
+	task.spawn(pending.Thread)
+end
+
+const function resolveRequest(self: any, requestId: number, player: Player?, packed: any)
+	const pending = self._pending[requestId]
+	if not pending then
+		-- Late (post-timeout) response, or one meant for another object
+		-- sharing this eventId.
+		return
+	end
+
+	if pending.Player ~= player then
+		Security.SecurityViolation:Fire(player, self.EventId, "response from a player the request wasn't sent to")
+		return
+	end
+
+	self._pending[requestId] = nil
+	task.cancel(pending.Timeout)
+	task.spawn(pending.Thread, table.unpack(packed, 1, packed.n))
+end
+
+-- Runs the Requested handlers and serializes their answer. A handler that
+-- errors still produces an (empty) response so the requester isn't left
+-- waiting out the full timeout.
+const function respond(self: any, player: Player?, packed: any): (buffer, { Instance })
+	const requested = self.Requested
+
+	local ok, responses
+	if player then
+		ok, responses = pcall(requested.Invoke, requested, player, table.unpack(packed, 1, packed.n))
+	else
+		ok, responses = pcall(requested.Invoke, requested, table.unpack(packed, 1, packed.n))
+	end
+
+	if not ok then
+		task.spawn(error, responses, 0)
+	elseif type(responses) == "table" and responses[1] ~= nil then
+		return self:Serialize(responses[1])
+	end
+
+	return self:Serialize()
+end
+
+-- All validation shared by both sides. Returns the decoded, packed values,
+-- or nil if the packet was dropped (after reporting why).
+const function accept(self: any, player: Player?, kind: any, requestId: any, rawBuffer: any, refs: any): any?
+	const eventId = self.EventId
+
+	if player and not Network.CheckRateLimit(self, player) then
+		Security.SecurityViolation:Fire(player, eventId, "rate limit exceeded")
+		return nil
+	end
+
+	if type(rawBuffer) ~= "buffer" or not Network.ValidateHeader(kind, requestId) then
+		Security.SecurityViolation:Fire(player, eventId, "malformed packet header")
+		return nil
+	end
+
+	const sizeReason = Network.CheckPacketSize(self, rawBuffer)
+	if sizeReason then
+		Security.SecurityViolation:Fire(player, eventId, sizeReason)
+		return nil
+	end
+
+	if not Network.ValidateRefs(refs) then
+		Security.SecurityViolation:Fire(player, eventId, "invalid instance refs")
+		return nil
+	end
+
+	const ok, packed = Network.Decode(self, rawBuffer, refs)
+	if not ok then
+		Security.SecurityViolation:Fire(player, eventId, `deserialize failed: {packed}`)
+		return nil
+	end
+
+	return packed
+end
+
+const function onServerPacket(self: any, player: Player, kind: any, requestId: any, rawBuffer: any, refs: any)
+	const packed = accept(self, player, kind, requestId, rawBuffer, refs)
+	if not packed then
+		return
+	end
+
+	if kind == Kind.Message then
+		self.RawReceived:Fire(player, rawBuffer)
+		self.Received:Fire(player, table.unpack(packed, 1, packed.n))
+	elseif kind == Kind.Request then
+		const responseBuffer, responseRefs = respond(self, player, packed)
+		reliableRemoteEvent:FireClient(player, self.EventId, Kind.Response, requestId, responseBuffer, responseRefs)
+	else
+		resolveRequest(self, requestId, player, packed)
+	end
+end
+
+const function onClientPacket(self: any, kind: any, requestId: any, rawBuffer: any, refs: any)
+	const packed = accept(self, nil, kind, requestId, rawBuffer, refs)
+	if not packed then
+		return
+	end
+
+	if kind == Kind.Message then
+		self.RawReceived:Fire(rawBuffer)
+		self.Received:Fire(table.unpack(packed, 1, packed.n))
+	elseif kind == Kind.Request then
+		const responseBuffer, responseRefs = respond(self, nil, packed)
+		reliableRemoteEvent:FireServer(self.EventId, Kind.Response, requestId, responseBuffer, responseRefs)
+	else
+		resolveRequest(self, requestId, nil, packed)
+	end
+end
 
 --
 
@@ -48,7 +202,59 @@ function SerialSharedMethods.Deserialize<data...>(self: SerialServer<data...> | 
 		results[index] = Codec.ReadValue(reader, refs)
 	end
 
-	return (table.unpack(results, 1, count) :: any)
+	-- No `:: any` cast here: `::`, like any other operator, forces its
+	-- operand into a single-value context, so casting this unpack would
+	-- silently truncate every argument after the first before it's returned.
+	return table.unpack(results, 1, count)
+end
+
+-- Per-object override for the max accepted packet size, in bytes. nil falls
+-- back to Serial.SetMaxPacketSize. Enforced by whichever side receives.
+function SerialSharedMethods.SetMaxPacketSize<data...>(self: SerialServer<data...> | SerialClient<data...>, bytes: number?)
+	self.MaxPacketSize = bytes
+end
+
+function SerialSharedMethods.GetMaxPacketSize<data...>(self: SerialServer<data...> | SerialClient<data...>): number
+	return Security.ClampPacketSize(self.MaxPacketSize)
+end
+
+-- Per-object override for max messages/sec from a single player. nil falls
+-- back to Serial.SetRateLimit. Only enforced on the server.
+function SerialSharedMethods.SetRateLimit<data...>(self: SerialServer<data...> | SerialClient<data...>, perSecond: number?)
+	self.RateLimit = perSecond
+end
+
+function SerialSharedMethods.GetRateLimit<data...>(self: SerialServer<data...> | SerialClient<data...>): number
+	return Security.ClampRateLimit(self.RateLimit)
+end
+
+--[[
+	Immediate cleanup. Optional: destroying the script that created this
+	object already disconnects its connections, which is all that keeps it
+	alive. Idempotent.
+]]
+function SerialSharedMethods.Destroy<data...>(self: SerialServer<data...> | SerialClient<data...>)
+	if self._destroyed then
+		return
+	end
+	self._destroyed = true
+
+	for _, connection in self._connections do
+		connection:Disconnect()
+	end
+	table.clear(self._connections)
+
+	for requestId in self._pending do
+		cancelRequest(self, requestId)
+	end
+
+	destroySignal(self.RawReceived)
+	destroySignal(self.Received)
+	destroySignal(self.Requested)
+
+	if self._buckets then
+		table.clear(self._buckets)
+	end
 end
 
 --
@@ -57,28 +263,35 @@ const SerialServerMethods = setmetatable({}, { __index = SerialSharedMethods })
 
 function SerialServerMethods.SendGlobalTCP<data...>(self: SerialServer<data...>, ...: data...)
 	const serialized, refs = self:Serialize(...)
-	reliableRemoteEvent[eventGlobalFunctionName](reliableRemoteEvent, self.EventId, serialized, refs)
+	reliableRemoteEvent:FireAllClients(self.EventId, Kind.Message, 0, serialized, refs)
 end
 
 function SerialServerMethods.SendGlobalUDP<data...>(self: SerialServer<data...>, ...: data...)
 	const serialized, refs = self:Serialize(...)
-	unreliableRemoteEvent[eventGlobalFunctionName](unreliableRemoteEvent, self.EventId, serialized, refs)
+	unreliableRemoteEvent:FireAllClients(self.EventId, Kind.Message, 0, serialized, refs)
 end
 
 function SerialServerMethods.SendTCP<data...>(self: SerialServer<data...>, player: Player, ...: data...)
 	const serialized, refs = self:Serialize(...)
-	reliableRemoteEvent[eventFunctionName](reliableRemoteEvent, player, self.EventId, serialized, refs)
+	reliableRemoteEvent:FireClient(player, self.EventId, Kind.Message, 0, serialized, refs)
 end
 
 function SerialServerMethods.SendUDP<data...>(self: SerialServer<data...>, player: Player, ...: data...)
 	const serialized, refs = self:Serialize(...)
-	unreliableRemoteEvent[eventFunctionName](unreliableRemoteEvent, player, self.EventId, serialized, refs)
+	unreliableRemoteEvent:FireClient(player, self.EventId, Kind.Message, 0, serialized, refs)
 end
 
+-- Yields until the client answers. Returns nothing if the client doesn't
+-- answer within RequestTimeout, leaves, or this object is destroyed.
 function SerialServerMethods.Request<data...>(self: SerialServer<data...>, player: Player, ...: data...): data...
+	if self._destroyed then
+		return
+	end
+
 	const serialized, refs = self:Serialize(...)
-	const responseBuffer, responseRefs = remoteFunction:InvokeClient(player, self.EventId, serialized, refs)
-	return self:Deserialize(responseBuffer, responseRefs)
+	const requestId = trackRequest(self, player)
+	reliableRemoteEvent:FireClient(player, self.EventId, Kind.Request, requestId, serialized, refs)
+	return coroutine.yield()
 end
 
 --
@@ -87,90 +300,178 @@ const SerialClientMethods = setmetatable({}, { __index = SerialSharedMethods })
 
 function SerialClientMethods.SendTCP<data...>(self: SerialClient<data...>, ...: data...)
 	const serialized, refs = self:Serialize(...)
-	reliableRemoteEvent[eventFunctionName](reliableRemoteEvent, self.EventId, serialized, refs)
+	reliableRemoteEvent:FireServer(self.EventId, Kind.Message, 0, serialized, refs)
 end
 
 function SerialClientMethods.SendUDP<data...>(self: SerialClient<data...>, ...: data...)
 	const serialized, refs = self:Serialize(...)
-	unreliableRemoteEvent[eventFunctionName](unreliableRemoteEvent, self.EventId, serialized, refs)
+	unreliableRemoteEvent:FireServer(self.EventId, Kind.Message, 0, serialized, refs)
 end
 
+-- Yields until the server answers. Returns nothing on timeout or Destroy.
 function SerialClientMethods.Request<data...>(self: SerialClient<data...>, ...: data...): data...
+	if self._destroyed then
+		return
+	end
+
 	const serialized, refs = self:Serialize(...)
-	const responseBuffer, responseRefs = remoteFunction:InvokeServer(self.EventId, serialized, refs)
-	return self:Deserialize(responseBuffer, responseRefs)
+	const requestId = trackRequest(self, nil)
+	reliableRemoteEvent:FireServer(self.EventId, Kind.Request, requestId, serialized, refs)
+	return coroutine.yield()
 end
 
 --
 
 const Serial = {
-	_links = Links,
-	
 	Server = {},
-	Client = {}
+	Client = {},
+
+	-- Default inbound limits for this side; per-object overrides go in the
+	-- config passed to Server.new/Client.new.
+	SetMaxPacketSize = Security.SetMaxPacketSize,
+	GetMaxPacketSize = Security.GetMaxPacketSize,
+	SetRateLimit = Security.SetRateLimit,
+	GetRateLimit = Security.GetRateLimit,
+
+	-- (player: Player?, eventId: string, reason: string) -- fires whenever an
+	-- inbound packet is dropped. player is nil on the client.
+	SecurityViolation = Security.SecurityViolation,
 }
 
-function Serial.Server.new<data...>(eventId: string): SerialServer<data...>
-	if Links[eventId] then
-		return Links[eventId]
-	end
+--[[
+	No registry: the object is kept alive only by its own connections to the
+	remotes. Those connections belong to whichever script's thread called
+	new(), so when that script is destroyed Roblox disconnects them and the
+	object gets garbage collected -- no local reference needed.
+]]
+function Serial.Server.new<data...>(eventId: string, config: SerialConfig?): SerialServer<data...>
+	assert(runService:IsServer(), "Serial.Server.new can only be called on the server")
 
-	local self = setmetatable({
+	const self = setmetatable({
 		EventId = eventId,
+		MaxPacketSize = config and config.MaxPacketSize,
+		RateLimit = config and config.RateLimit,
+		RequestTimeout = config and config.RequestTimeout,
 
 		RawReceived = Signal.new() :: Signal.Signal<Player, buffer>,
 		Received = Signal.new() :: Signal.Signal<Player, data...>,
 		Requested = Signal.new() :: Signal.Signal<Player, data...>,
+
+		_connections = {} :: { RBXScriptConnection },
+		_pending = {},
+		_buckets = {},
+		_destroyed = false,
 	}, { __index = SerialServerMethods })
-	
-	Links[eventId] = self
+
+	const function onEvent(player: Player, id: any, kind: any, requestId: any, rawBuffer: any, refs: any)
+		if id == eventId then
+			onServerPacket(self, player, kind, requestId, rawBuffer, refs)
+		end
+	end
+
+	self._connections = {
+		reliableRemoteEvent.OnServerEvent:Connect(onEvent),
+		unreliableRemoteEvent.OnServerEvent:Connect(onEvent),
+		players.PlayerRemoving:Connect(function(player: Player)
+			self._buckets[player] = nil
+			for requestId, pending in self._pending do
+				if pending.Player == player then
+					cancelRequest(self, requestId)
+				end
+			end
+		end),
+	}
+
 	return self
 end
 
-function Serial.Client.new<data...>(eventId: string): SerialClient<data...>
-	if Links[eventId] then
-		return Links[eventId]
-	end
+function Serial.Client.new<data...>(eventId: string, config: SerialConfig?): SerialClient<data...>
+	assert(runService:IsClient(), "Serial.Client.new can only be called on the client")
 
-	local self = setmetatable({
+	const self = setmetatable({
 		EventId = eventId,
+		MaxPacketSize = config and config.MaxPacketSize,
+		RateLimit = config and config.RateLimit,
+		RequestTimeout = config and config.RequestTimeout,
 
 		RawReceived = Signal.new() :: Signal.Signal<buffer>,
 		Received = Signal.new() :: Signal.Signal<data...>,
 		Requested = Signal.new() :: Signal.Signal<data...>,
+
+		_connections = {} :: { RBXScriptConnection },
+		_pending = {},
+		_destroyed = false,
 	}, { __index = SerialClientMethods })
 
-	Links[eventId] = self
+	const function onEvent(id: any, kind: any, requestId: any, rawBuffer: any, refs: any)
+		if id == eventId then
+			onClientPacket(self, kind, requestId, rawBuffer, refs)
+		end
+	end
+
+	self._connections = {
+		reliableRemoteEvent.OnClientEvent:Connect(onEvent),
+		unreliableRemoteEvent.OnClientEvent:Connect(onEvent),
+	}
+
 	return self
 end
 
 --
 
+export type SerialConfig = {
+	-- Max accepted inbound packet size, in bytes. Falls back to
+	-- Serial.SetMaxPacketSize's value when omitted.
+	MaxPacketSize: number?,
+
+	-- Max accepted messages/sec, per player. Server-only; falls back to
+	-- Serial.SetRateLimit's value when omitted.
+	RateLimit: number?,
+
+	-- Seconds Request waits for an answer before returning nothing.
+	RequestTimeout: number?,
+}
+
 export type _serialServerMethods<data...> = {
+	read SetMaxPacketSize: (self: SerialServer<data...>, bytes: number?) -> (),
+	read GetMaxPacketSize: (self: SerialServer<data...>) -> number,
+	read SetRateLimit: (self: SerialServer<data...>, perSecond: number?) -> (),
+	read GetRateLimit: (self: SerialServer<data...>) -> number,
+	read Destroy: (self: SerialServer<data...>) -> (),
+
 	read SendGlobalTCP: (self: SerialServer<data...>, data...) -> (),
 	read SendGlobalUDP: (self: SerialServer<data...>, data...) -> (),
 
 	read SendTCP: (self: SerialServer<data...>, player: Player, data...) -> (),
 	read SendUDP: (self: SerialServer<data...>, player: Player, data...) -> (),
-	
-	read Request: (self: SerialServer<data...>, data...) -> data...,
-	
+
+	read Request: (self: SerialServer<data...>, player: Player, data...) -> data...,
+
 	read Serialize: (self: SerialServer<data...>, data...) -> (buffer, { Instance }),
 	read Deserialize: (self: SerialServer<data...>, rawBuffer: buffer, refs: { Instance }?) -> data...,
 }
 
 export type _serialClientMethods<data...> = {
+	read SetMaxPacketSize: (self: SerialClient<data...>, bytes: number?) -> (),
+	read GetMaxPacketSize: (self: SerialClient<data...>) -> number,
+	read SetRateLimit: (self: SerialClient<data...>, perSecond: number?) -> (),
+	read GetRateLimit: (self: SerialClient<data...>) -> number,
+	read Destroy: (self: SerialClient<data...>) -> (),
+
 	read SendTCP: (self: SerialClient<data...>, data...) -> (),
 	read SendUDP: (self: SerialClient<data...>, data...) -> (),
 
 	read Request: (self: SerialClient<data...>, data...) -> data...,
-	
+
 	read Serialize: (self: SerialClient<data...>, data...) -> (buffer, { Instance }),
 	read Deserialize: (self: SerialClient<data...>, rawBuffer: buffer, refs: { Instance }?) -> data...,
 }
 
 export type SerialServer<data...> = setmetatable<{
 	read EventId: string,
+	MaxPacketSize: number?,
+	RateLimit: number?,
+	RequestTimeout: number?,
 
 	read RawReceived: Signal.Signal<Player, buffer>,
 	read Received: Signal.Signal<Player, data...>,
@@ -179,22 +480,26 @@ export type SerialServer<data...> = setmetatable<{
 
 export type SerialClient<data...> = setmetatable<{
 	read EventId: string,
+	MaxPacketSize: number?,
+	RateLimit: number?,
+	RequestTimeout: number?,
 
 	read RawReceived: Signal.Signal<buffer>,
 	read Received: Signal.Signal<data...>,
+	read Requested: Signal.Signal<data...>,
 }, { __index: _serialClientMethods<data...> }>
 
 return Serial
 ]]></ProtectedString>
-			<string name="ScriptGuid">{C34C5F11-C61A-4590-A69A-FED0E3EC5309}</string>
-			<BinaryString name="AttributesSerialize"></BinaryString>
+			<string name="ScriptGuid">{3A784874-E692-4475-A5D8-4F68701B6F58}</string>
+			<BinaryString name="AttributesSerialize">AQAAAAUAAABfZmx1eAIiAAAAMXx3dnluL2ZsdXgvU2VyaWFsQG1haW58MTc4ODE0MDQ5NQ==</BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 			<bool name="DefinesCapabilities">false</bool>
 			<string name="Name">Serial</string>
 			<int64 name="SourceAssetId">-1</int64>
 			<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 		</Properties>
-		<Item class="ModuleScript" referent="RBXA98157E948F34F2B847D789136B10561">
+		<Item class="ModuleScript" referent="RBX70B8368C66B54D369AC962AE6FDDBAC1">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[const Codec = {}
@@ -251,7 +556,14 @@ const AXES = { Enum.Axis.X, Enum.Axis.Y, Enum.Axis.Z }
 const MIN_I32 = -2147483648
 const MAX_I32 = 2147483647
 
-function Codec.WriteValue(writer, value: any)
+const MAX_DEPTH = 64
+
+function Codec.WriteValue(writer, value: any, depth: number?)
+	const currentDepth = depth or 0
+	if currentDepth > MAX_DEPTH then
+		error(`Serial: value exceeds maximum nesting depth of {MAX_DEPTH}`)
+	end
+
 	const valueType = typeof(value)
 
 	if value == nil then
@@ -423,14 +735,14 @@ function Codec.WriteValue(writer, value: any)
 			writer:WriteU8(TypeTag.Array)
 			writer:WriteU32(arrayLength)
 			for index = 1, arrayLength do
-				Codec.WriteValue(writer, value[index])
+				Codec.WriteValue(writer, value[index], currentDepth + 1)
 			end
 		else
 			writer:WriteU8(TypeTag.Map)
 			writer:WriteU32(totalCount)
 			for key, mapValue in next, value do
-				Codec.WriteValue(writer, key)
-				Codec.WriteValue(writer, mapValue)
+				Codec.WriteValue(writer, key, currentDepth + 1)
+				Codec.WriteValue(writer, mapValue, currentDepth + 1)
 			end
 		end
 	else
@@ -438,7 +750,12 @@ function Codec.WriteValue(writer, value: any)
 	end
 end
 
-function Codec.ReadValue(reader, refs: { Instance }?): any
+function Codec.ReadValue(reader, refs: { Instance }?, depth: number?): any
+	const currentDepth = depth or 0
+	if currentDepth > MAX_DEPTH then
+		error(`Serial: value exceeds maximum nesting depth of {MAX_DEPTH}`)
+	end
+
 	const tag = reader:ReadU8()
 
 	if tag == TypeTag.Nil then
@@ -508,6 +825,9 @@ function Codec.ReadValue(reader, refs: { Instance }?): any
 		return NumberRange.new(min, max)
 	elseif tag == TypeTag.NumberSequence then
 		const count = reader:ReadU32()
+		if count > reader:Remaining() then
+			error(`Serial: keypoint count {count} exceeds remaining buffer size`)
+		end
 		const keypoints = table.create(count)
 		for index = 1, count do
 			const time = reader:ReadF32()
@@ -518,6 +838,9 @@ function Codec.ReadValue(reader, refs: { Instance }?): any
 		return NumberSequence.new(keypoints)
 	elseif tag == TypeTag.ColorSequence then
 		const count = reader:ReadU32()
+		if count > reader:Remaining() then
+			error(`Serial: keypoint count {count} exceeds remaining buffer size`)
+		end
 		const keypoints = table.create(count)
 		for index = 1, count do
 			const time = reader:ReadF32()
@@ -595,17 +918,23 @@ function Codec.ReadValue(reader, refs: { Instance }?): any
 		return refs and refs[index] or nil
 	elseif tag == TypeTag.Array then
 		const length = reader:ReadU32()
+		if length > reader:Remaining() then
+			error(`Serial: array length {length} exceeds remaining buffer size`)
+		end
 		const result = table.create(length)
 		for index = 1, length do
-			result[index] = Codec.ReadValue(reader, refs)
+			result[index] = Codec.ReadValue(reader, refs, currentDepth + 1)
 		end
 		return result
 	elseif tag == TypeTag.Map then
 		const count = reader:ReadU32()
+		if count > reader:Remaining() then
+			error(`Serial: map entry count {count} exceeds remaining buffer size`)
+		end
 		const result = {}
 		for _ = 1, count do
-			const key = Codec.ReadValue(reader, refs)
-			const mapValue = Codec.ReadValue(reader, refs)
+			const key = Codec.ReadValue(reader, refs, currentDepth + 1)
+			const mapValue = Codec.ReadValue(reader, refs, currentDepth + 1)
 			result[key] = mapValue
 		end
 		return result
@@ -616,7 +945,7 @@ end
 
 return Codec
 ]]></ProtectedString>
-				<string name="ScriptGuid">{758C0965-4B1C-4F40-8828-A3AB09898967}</string>
+				<string name="ScriptGuid">{4735EE80-746C-43E7-81AC-0A5592D9873A}</string>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
@@ -625,7 +954,7 @@ return Codec
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBXB70E40316A034E13B420A974FCF48437">
+		<Item class="ModuleScript" referent="RBX020874875D424A2D95B5DD5D6E39A9BF">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[--!strict
@@ -721,7 +1050,7 @@ export type BufferWriter = setmetatable<{
 
 return BufferWriter
 ]]></ProtectedString>
-				<string name="ScriptGuid">{8FEB8F12-DBD2-45AB-BF60-587F60179CEB}</string>
+				<string name="ScriptGuid">{6C5E6EDA-C30D-4D53-9BC8-D47A7D37C0BB}</string>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
@@ -730,7 +1059,7 @@ return BufferWriter
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX450EF7B7F9D540119DE6C77616AADDD4">
+		<Item class="ModuleScript" referent="RBXD48DB0618ADF4866BD5DA686AF556255">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[--!strict
@@ -743,6 +1072,10 @@ function BufferReader.new(sourceBuffer: buffer): BufferReader
 		Buffer = sourceBuffer,
 		Position = 0,
 	}, { __index = BufferReaderMethods })
+end
+
+function BufferReaderMethods.Remaining(self: BufferReader): number
+	return buffer.len(self.Buffer) - self.Position
 end
 
 function BufferReaderMethods.ReadU8(self: BufferReader): number
@@ -783,6 +1116,9 @@ end
 
 function BufferReaderMethods.ReadString(self: BufferReader): string
 	const length = self:ReadU32()
+	if length > self:Remaining() then
+		error(`Serial: string length {length} exceeds remaining buffer size`)
+	end
 	const value = buffer.readstring(self.Buffer, self.Position, length)
 	self.Position += length
 	return value
@@ -795,7 +1131,7 @@ export type BufferReader = setmetatable<{
 
 return BufferReader
 ]]></ProtectedString>
-				<string name="ScriptGuid">{65AB346A-0FF8-4818-86CA-9E51D4886F39}</string>
+				<string name="ScriptGuid">{D614D854-1FD5-499A-A50F-814658806B3D}</string>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
@@ -804,32 +1140,17 @@ return BufferReader
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX35997E23AED24E7E96E2EFD17AD20A5D">
+		<Item class="ModuleScript" referent="RBX33177EFC7B7B4AC39BFE94A925E25758">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[--!strict
 
-const runService = game:GetService("RunService")
-
-const eventFunctionName = runService:IsClient() and "FireServer" or "FireClient"
-const eventGlobalFunctionName = runService:IsClient() and "FireServer" or "FireAllClients"
-
-const reliableRemoteEvent = script:WaitForChild("ReliableRemoteEvent")
-local unreliableRemoteEvent = script:WaitForChild("UnreliableRemoteEvent")
-local remoteFunction = script:WaitForChild("RemoteFunction")
-
 return {
-	RunService = runService,
-
-	EventFunctionName = eventFunctionName,
-	EventGlobalFunctionName = eventGlobalFunctionName,
-
-	ReliableRemoteEvent = reliableRemoteEvent,
-	UnreliableRemoteEvent = unreliableRemoteEvent,
-	RemoteFunction = remoteFunction,
+	ReliableRemoteEvent = script:WaitForChild("ReliableRemoteEvent") :: RemoteEvent,
+	UnreliableRemoteEvent = script:WaitForChild("UnreliableRemoteEvent") :: UnreliableRemoteEvent,
 }
 ]]></ProtectedString>
-				<string name="ScriptGuid">{C6A78CCB-7A34-4881-A72F-7FA3BF3E6E48}</string>
+				<string name="ScriptGuid">{A2085DA8-B705-4822-833F-C825F938506C}</string>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
@@ -837,17 +1158,7 @@ return {
 				<int64 name="SourceAssetId">-1</int64>
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
-			<Item class="RemoteFunction" referent="RBXA7E091AEDA294CAD9F78DB04F508342B">
-				<Properties>
-					<BinaryString name="AttributesSerialize"></BinaryString>
-					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
-					<bool name="DefinesCapabilities">false</bool>
-					<string name="Name">RemoteFunction</string>
-					<int64 name="SourceAssetId">-1</int64>
-					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
-				</Properties>
-			</Item>
-			<Item class="RemoteEvent" referent="RBX043C785B271C4432849366E1A2831D00">
+			<Item class="RemoteEvent" referent="RBX9648E79E598F4BA5B1F426E599345559">
 				<Properties>
 					<BinaryString name="AttributesSerialize"></BinaryString>
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -857,7 +1168,7 @@ return {
 					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				</Properties>
 			</Item>
-			<Item class="UnreliableRemoteEvent" referent="RBX4DE2BEE8EEE2469AB35C64BD6AC5F202">
+			<Item class="UnreliableRemoteEvent" referent="RBXC0A9D4C513284E6FA1DB5D2C1637FEBA">
 				<Properties>
 					<BinaryString name="AttributesSerialize"></BinaryString>
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -868,78 +1179,126 @@ return {
 				</Properties>
 			</Item>
 		</Item>
-		<Item class="ModuleScript" referent="RBXD2D7DDFD8A9A4E4E985205606D467C2E">
+		<Item class="ModuleScript" referent="RBXC46E46ABBC5249FFBCF9579C054BC75E">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
-				<ProtectedString name="Source"><![CDATA[const Remotes = require("./Remotes")
-const Links = require("./Links")
+				<ProtectedString name="Source"><![CDATA[const Security = require("./Security")
 
-const runService = Remotes.RunService
-const reliableRemoteEvent = Remotes.ReliableRemoteEvent
-const unreliableRemoteEvent = Remotes.UnreliableRemoteEvent
-const remoteFunction = Remotes.RemoteFunction
+const Network = {
+	-- Second remote argument on every packet: what the payload is for.
+	Kind = table.freeze({
+		Message = 0,
+		Request = 1,
+		Response = 2,
+	}),
 
-if runService:IsServer() then
-	const function onReliableEvent(player: Player, eventId: string, rawBuffer: buffer, refs: { Instance }?)
-		const self = Links[eventId]
-		if not self then
-			return
-		end
+	DefaultRequestTimeout = 10,
+}
 
-		self.RawReceived:Fire(player, rawBuffer)
-		self.Received:Fire(player, self:Deserialize(rawBuffer, refs))
-	end
+--[[
+	Every object listening on a remote is handed the same argument values
+	for a given fire, so objects sharing an eventId decode each packet once
+	instead of once per object. Weak keys: an entry disappears along with
+	its buffer, so nothing here outlives the packet it describes.
+]]
+const decodeCache = setmetatable({}, { __mode = "k" }) :: { [buffer]: { any } }
 
-	reliableRemoteEvent.OnServerEvent:Connect(onReliableEvent)
-	unreliableRemoteEvent.OnServerEvent:Connect(onReliableEvent)
+-- Unique per VM (not per object) so two objects sharing an eventId can
+-- never mistake each other's responses for their own.
+local lastRequestId = 0
 
-	remoteFunction.OnServerInvoke = function(player: Player, eventId: string, rawBuffer: buffer, refs: { Instance }?): ...any
-		const self = Links[eventId]
-		if not self then
-			return buffer.create(0)
-		end
-
-		const responses = self.Requested:Invoke(player, self:Deserialize(rawBuffer, refs))
-		if responses[1] == nil then
-			return buffer.create(0)
-		end
-
-		const responseBuffer, responseRefs = self:Serialize(responses[1])
-		return responseBuffer, responseRefs
-	end
-else
-	const function onReliableEvent(eventId: string, rawBuffer: buffer, refs: { Instance }?)
-		const self = Links[eventId]
-		if not self then
-			return
-		end
-
-		self.RawReceived:Fire(rawBuffer)
-		self.Received:Fire(self:Deserialize(rawBuffer, refs))
-	end
-	
-	remoteFunction.OnClientInvoke = function(player: Player, eventId: string, rawBuffer: buffer, refs: { Instance }?): ...any
-		const self = Links[eventId]
-		if not self then
-			return buffer.create(0)
-		end
-
-		const responses = self.Requested:Invoke(player, self:Deserialize(rawBuffer, refs))
-		if responses[1] == nil then
-			return buffer.create(0)
-		end
-
-		const responseBuffer, responseRefs = self:Serialize(responses[1])
-		return responseBuffer, responseRefs
-	end
-
-	reliableRemoteEvent.OnClientEvent:Connect(onReliableEvent)
-	unreliableRemoteEvent.OnClientEvent:Connect(onReliableEvent)
+function Network.NextRequestId(): number
+	lastRequestId += 1
+	return lastRequestId
 end
 
-return true
+function Network.ValidateHeader(kind: any, requestId: any): boolean
+	if kind == Network.Kind.Message then
+		return true
+	end
+
+	if kind ~= Network.Kind.Request and kind ~= Network.Kind.Response then
+		return false
+	end
+
+	-- NaN and inf both fail `% 1 == 0`.
+	return type(requestId) == "number" and requestId > 0 and requestId % 1 == 0
+end
+
+--[[
+	refs rides along on the remote as a plain, attacker-shaped table. Walk
+	every entry (not just 1..#refs, which sparse tables can hide from) and
+	bail on the first thing that isn't a real Instance.
+]]
+function Network.ValidateRefs(refs: any): boolean
+	if refs == nil then
+		return true
+	end
+
+	if type(refs) ~= "table" then
+		return false
+	end
+
+	local count = 0
+	for _, ref in refs do
+		count += 1
+		if count > Security.MaxRefs or typeof(ref) ~= "Instance" then
+			return false
+		end
+	end
+
+	return true
+end
+
+function Network.CheckPacketSize(self: any, rawBuffer: buffer): string?
+	const maxPacketSize = self:GetMaxPacketSize()
+	const size = buffer.len(rawBuffer)
+	if size > maxPacketSize then
+		return `packet of {size} bytes exceeds max size of {maxPacketSize} bytes`
+	end
+	return nil
+end
+
+-- Token bucket per (player, object), refilled continuously.
+function Network.CheckRateLimit(self: any, player: Player): boolean
+	const rate = self:GetRateLimit()
+	const now = os.clock()
+
+	const bucket = self._buckets[player]
+	if not bucket then
+		self._buckets[player] = { Tokens = rate - 1, Last = now }
+		return true
+	end
+
+	bucket.Tokens = math.min(rate, bucket.Tokens + (now - bucket.Last) * rate)
+	bucket.Last = now
+
+	if bucket.Tokens < 1 then
+		return false
+	end
+
+	bucket.Tokens -= 1
+	return true
+end
+
+-- Returns (ok, packed) where packed is a table.pack of the decoded values,
+-- or the error message when ok is false.
+function Network.Decode(self: any, rawBuffer: buffer, refs: { Instance }?): (boolean, any)
+	local cached = decodeCache[rawBuffer]
+	if not cached then
+		const ok, result = pcall(function()
+			return table.pack(self:Deserialize(rawBuffer, refs))
+		end)
+		cached = { ok, result }
+		decodeCache[rawBuffer] = cached
+	end
+
+	return cached[1], cached[2]
+end
+
+return Network
 ]]></ProtectedString>
-				<string name="ScriptGuid">{853A437A-E79F-44AF-80BC-C490478424A8}</string>
+				<string name="ScriptGuid">{8C69954F-2E2C-4C10-8DC5-33EFD0915812}</string>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
@@ -948,16 +1307,68 @@ return true
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX1F986BE3552E47F3AB0FC3D49E6DEB08">
+		<Item class="ModuleScript" referent="RBX0C2240392048433DAEC2DE54889AD82C">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
-				<ProtectedString name="Source"><![CDATA[return {} :: { [string]: any }
+				<ProtectedString name="Source"><![CDATA[--!strict
+
+const Signal = require("../Signal")
+
+const minMaxPacketSize = 64
+const absoluteMaxPacketSize = 65536
+
+const minRateLimit = 1
+const absoluteMaxRateLimit = 1000
+
+local maxPacketSize = 1024
+local rateLimit = 500 -- messages/sec, per player, per link
+
+const Security = {
+	MaxRefs = 1024,
+
+	-- (player: Player?, eventId: string, reason: string) -- player is nil when raised on the client
+	SecurityViolation = Signal.new() :: Signal.Signal<Player?, string, string>,
+}
+
+function Security.SetMaxPacketSize(bytes: number)
+	assert(type(bytes) == "number" and bytes == bytes, "Serial: MaxPacketSize must be a number")
+	maxPacketSize = math.clamp(math.floor(bytes), minMaxPacketSize, absoluteMaxPacketSize)
+end
+
+function Security.GetMaxPacketSize(): number
+	return maxPacketSize
+end
+
+function Security.ClampPacketSize(bytes: number?): number
+	if bytes == nil then
+		return maxPacketSize
+	end
+	return math.clamp(math.floor(bytes), minMaxPacketSize, absoluteMaxPacketSize)
+end
+
+function Security.SetRateLimit(perSecond: number)
+	assert(type(perSecond) == "number" and perSecond == perSecond, "Serial: RateLimit must be a number")
+	rateLimit = math.clamp(math.floor(perSecond), minRateLimit, absoluteMaxRateLimit)
+end
+
+function Security.GetRateLimit(): number
+	return rateLimit
+end
+
+function Security.ClampRateLimit(perSecond: number?): number
+	if perSecond == nil then
+		return rateLimit
+	end
+	return math.clamp(math.floor(perSecond), minRateLimit, absoluteMaxRateLimit)
+end
+
+return Security
 ]]></ProtectedString>
-				<string name="ScriptGuid">{AB6D75FD-A871-4B57-A904-B01DC01D9357}</string>
+				<string name="ScriptGuid">{6B06BC62-4915-41C1-98A0-A88280CC5D54}</string>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
-				<string name="Name">Links</string>
+				<string name="Name">Security</string>
 				<int64 name="SourceAssetId">-1</int64>
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
