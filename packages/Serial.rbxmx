@@ -24,10 +24,6 @@ const unreliableRemoteEvent = Remotes.UnreliableRemoteEvent
 
 const Kind = Network.Kind
 
---[[
-	Signal implementations vary in what they call their teardown method --
-	try the common names rather than assuming one.
-]]
 const function destroySignal(signal: any)
 	if not signal then
 		return
@@ -38,11 +34,6 @@ const function destroySignal(signal: any)
 	end
 end
 
---[[
-	Registers the calling thread as waiting on a response and returns the
-	request id to send. The thread is resumed by resolveRequest with the
-	response values, or with nothing on timeout / Destroy / player leaving.
-]]
 const function trackRequest(self: any, player: Player?): number
 	const requestId = Network.NextRequestId()
 	const thread = coroutine.running()
@@ -71,8 +62,6 @@ end
 const function resolveRequest(self: any, requestId: number, player: Player?, packed: any)
 	const pending = self._pending[requestId]
 	if not pending then
-		-- Late (post-timeout) response, or one meant for another object
-		-- sharing this eventId.
 		return
 	end
 
@@ -86,9 +75,6 @@ const function resolveRequest(self: any, requestId: number, player: Player?, pac
 	task.spawn(pending.Thread, table.unpack(packed, 1, packed.n))
 end
 
--- Runs the Requested handlers and serializes their answer. A handler that
--- errors still produces an (empty) response so the requester isn't left
--- waiting out the full timeout.
 const function respond(self: any, player: Player?, packed: any): (buffer, { Instance })
 	const requested = self.Requested
 
@@ -108,8 +94,6 @@ const function respond(self: any, player: Player?, packed: any): (buffer, { Inst
 	return self:Serialize()
 end
 
--- All validation shared by both sides. Returns the decoded, packed values,
--- or nil if the packet was dropped (after reporting why).
 const function accept(self: any, player: Player?, kind: any, requestId: any, rawBuffer: any, refs: any): any?
 	const eventId = self.EventId
 
@@ -202,9 +186,6 @@ function SerialSharedMethods.Deserialize<data...>(self: SerialServer<data...> | 
 		results[index] = Codec.ReadValue(reader, refs)
 	end
 
-	-- No `:: any` cast here: `::`, like any other operator, forces its
-	-- operand into a single-value context, so casting this unpack would
-	-- silently truncate every argument after the first before it's returned.
 	return table.unpack(results, 1, count)
 end
 
@@ -228,11 +209,6 @@ function SerialSharedMethods.GetRateLimit<data...>(self: SerialServer<data...> |
 	return Security.ClampRateLimit(self.RateLimit)
 end
 
---[[
-	Immediate cleanup. Optional: destroying the script that created this
-	object already disconnects its connections, which is all that keeps it
-	alive. Idempotent.
-]]
 function SerialSharedMethods.Destroy<data...>(self: SerialServer<data...> | SerialClient<data...>)
 	if self._destroyed then
 		return
