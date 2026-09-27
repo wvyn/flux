@@ -246,7 +246,7 @@ return Ragdoll
 	-- Size of each limb's invisible collider relative to the limb. Limbs don't
 	-- collide on their own (the Humanoid handles that normally), so without
 	-- these they'd fall through the floor.
-	ColliderScale = 0.9,
+	ColliderScale = 0.85,
 
 	-- Studs above the torso the detached HumanoidRootPart floats while
 	-- ragdolled. Also where the character stands back up from, so the get-up
