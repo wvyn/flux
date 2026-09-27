@@ -1,302 +1,270 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
-    <Meta name="ExplicitAutoJoints">true</Meta>
-    <Item class="ModuleScript" referent="RBXYX22U392085VOFHBCOLTL3EGT22QVU5X">
-        <Properties>
-            <string name="Name">Ragdoll</string>
-            <string name="ScriptGuid">{ff4f8e50-204f-4c93-87a6-d00890704912}</string>
-            <ProtectedString name="Source"><![CDATA[local runService = game:GetService("RunService")
-local players = game:GetService("Players")
+	<Meta name="ExplicitAutoJoints">true</Meta>
+	<External>null</External>
+	<External>nil</External>
+	<Item class="ModuleScript" referent="RBXD7859577FB8E45599B06E7ABD7C61220">
+		<Properties>
+			<Content name="LinkedSource"><null></null></Content>
+			<ProtectedString name="Source"><![CDATA[const runService = game:GetService("RunService")
 
-local isServer = runService:IsServer()
+const Settings = require("@self/RagdollSettings")
 
-local Ragdoll = { _rigs = {} }
-local RagdollMethods = {}
+const Ragdoll = {}
+const RagdollMethods = {}
 
-local function useAttachment(name: string, position: Vector3, parent: Instance): Attachment
-	local existing = parent:FindFirstChild(name)
-	if existing then return existing end
-	
-	local attachment = Instance.new("Attachment")
-	attachment.Name = name
-	attachment.Position = position
-	attachment.Parent = parent
-	return attachment
+const function makeCollider(limb: BasePart, jointParent: BasePart): Instance
+	const collider = Instance.new("Part")
+	collider.Name = "RagdollCollider"
+	collider.Size = limb.Size * Settings.ColliderScale
+	collider.CFrame = limb.CFrame
+	collider.Transparency = 1
+	collider.Massless = true
+	collider.CanCollide = true
+	collider.CanQuery = false
+	collider.CanTouch = false
+
+	const weld = Instance.new("WeldConstraint")
+	weld.Part0 = limb
+	weld.Part1 = collider
+	weld.Parent = collider
+
+	const noCollision = Instance.new("NoCollisionConstraint")
+	noCollision.Part0 = collider
+	noCollision.Part1 = jointParent
+	noCollision.Parent = collider
+
+	collider.Parent = limb
+	return collider
 end
 
-local reducedSize = 0.85
-local function createRagdollParts(character: Model)
-	local partsContainer = Instance.new("Camera")
-	partsContainer.Name = "RagdollParts"
-	
-	local head: Part = Instance.fromExisting(character:WaitForChild("Head"))
-	local torso: Part = Instance.fromExisting(character:WaitForChild("Torso"))
-	local leftArm: Part = Instance.fromExisting(character:WaitForChild("Left Arm"))
-	local rightArm: Part = Instance.fromExisting(character:WaitForChild("Right Arm"))
-	local leftLeg: Part = Instance.fromExisting(character:WaitForChild("Left Leg"))
-	local rightLeg: Part = Instance.fromExisting(character:WaitForChild("Right Leg"))
-	
-	head.CollisionGroup = "Ragdoll"
-	torso.CollisionGroup = "Ragdoll"
-	leftArm.CollisionGroup = "Ragdoll"
-	rightArm.CollisionGroup = "Ragdoll"
-	leftLeg.CollisionGroup = "Ragdoll"
-	rightLeg.CollisionGroup = "Ragdoll"
-	
-	head.Transparency = 1
-	torso.Transparency = 1
-	leftArm.Transparency = 1
-	rightArm.Transparency = 1
-	leftLeg.Transparency = 1
-	rightLeg.Transparency = 1
-	
-	head.Size *= reducedSize
-	torso.Size *= reducedSize
-	leftArm.Size *= reducedSize
-	rightArm.Size *= reducedSize
-	leftLeg.Size *= reducedSize
-	rightLeg.Size *= reducedSize
-	
-	head.CanCollide = false
-	torso.CanCollide = false
-	leftArm.CanCollide = false
-	rightArm.CanCollide = false
-	leftLeg.CanCollide = false
-	rightLeg.CanCollide = false
-	
-	head.Massless = true
-	torso.Massless = true
-	leftArm.Massless = true
-	rightArm.Massless = true
-	leftLeg.Massless = true
-	rightLeg.Massless = true
-	
-	head.Parent = partsContainer
-	torso.Parent = partsContainer
-	leftArm.Parent = partsContainer
-	rightArm.Parent = partsContainer
-	leftLeg.Parent = partsContainer
-	rightLeg.Parent = partsContainer
-	
-	partsContainer.Parent = character
-	
-	return {
-		Head = head,
-		Torso = torso,
-		["Left Arm"] = leftArm,
-		["Right Arm"] = rightArm,
-		["Left Leg"] = leftLeg,
-		["Right Leg"] = rightLeg
-	}, partsContainer
+const function makeSocket(motor: Motor6D): { Instance }
+	const attachment0 = Instance.new("Attachment")
+	attachment0.Name = "RagdollAttachment"
+	attachment0.CFrame = motor.C0
+	attachment0.Parent = motor.Part0
+
+	const attachment1 = Instance.new("Attachment")
+	attachment1.Name = "RagdollAttachment"
+	attachment1.CFrame = motor.C1
+	attachment1.Parent = motor.Part1
+
+	const socket = Instance.new("BallSocketConstraint")
+	socket.Name = "RagdollSocket"
+	socket.Attachment0 = attachment0
+	socket.Attachment1 = attachment1
+	socket.LimitsEnabled = true
+	socket.UpperAngle = Settings.UpperAngle
+	socket.TwistLimitsEnabled = true
+	socket.TwistLowerAngle = -Settings.TwistAngle
+	socket.TwistUpperAngle = Settings.TwistAngle
+	socket.Parent = motor.Part1
+
+	return { attachment0, attachment1, socket }
 end
 
-local function createAttachments(ragdollParts: typeof(createRagdollParts()))
-	local head = ragdollParts.Head
-	local headSize = head.Size * 1/reducedSize
-	
-	local torso = ragdollParts.Torso
-	local torsoSize = torso.Size * 1/reducedSize
-	
-	local leftArm = ragdollParts["Left Arm"]
-	local leftArmSize = leftArm.Size * 1/reducedSize
-	
-	local rightArm = ragdollParts["Right Arm"]
-	local rightArmSize = rightArm.Size * 1/reducedSize
-	
-	local leftLeg = ragdollParts["Left Leg"]
-	local leftLegSize = leftLeg.Size * 1/reducedSize
-	
-	local rightLeg = ragdollParts["Right Leg"]
-	local rightLegSize = rightLeg.Size * 1/reducedSize
-	
-	local attachments = {
-		["Head"] = { Neck = useAttachment("NeckAttachment", Vector3.new(0, -headSize.Y/2), head) },
-		Torso = {
-			Neck = useAttachment("NeckAttachment", Vector3.new(0, torsoSize.Y/2), torso),
-			LeftCollar = useAttachment("LeftCollarAttachment", Vector3.new(-torsoSize.X/2, torsoSize.Y/2), torso),
-			RightCollar = useAttachment("RightCollarAttachment", Vector3.new(torsoSize.X/2, torsoSize.Y/2), torso),
-			LeftHip = useAttachment("LeftHipAttachment", Vector3.new(-torsoSize.X/2, -torsoSize.Y/2), torso),
-			RightHip = useAttachment("RightHipAttachment", Vector3.new(torsoSize.X/2, -torsoSize.Y/2), torso),
-		},
-		["Left Arm"] = { LeftCollar = useAttachment("LeftCollarAttachment", Vector3.new(leftArmSize.X/2, leftArmSize.Y/2, 0), leftArm) },
-		["Right Arm"] = { RightCollar = useAttachment("RightCollarAttachment", Vector3.new(-rightArmSize.X/2, rightArmSize.Y/2, 0), rightArm) },
-		["Left Leg"] = { LeftHip = useAttachment("LeftHipAttachment", Vector3.new(-leftLegSize.X/2, leftLegSize.Y/2, 0), leftLeg) },
-		["Right Leg"] = { RightHip = useAttachment("RightHipAttachment", Vector3.new(rightLegSize.X/2, rightLegSize.Y/2, 0), rightLeg) },
-	}
-	
-	return attachments
-end
-
-local function bindSocket(attachment0: Attachment, attachment1: Attachment)
-	local ballSocketConstraint = Instance.new("BallSocketConstraint")
-	ballSocketConstraint.Name = `{attachment1.Name}Socket`
-	ballSocketConstraint.Attachment0 = attachment0
-	ballSocketConstraint.Attachment1 = attachment1
-	ballSocketConstraint.Enabled = false
-	ballSocketConstraint.LimitsEnabled = true
-	ballSocketConstraint.UpperAngle = 60
-	ballSocketConstraint.TwistLimitsEnabled = true
-	ballSocketConstraint.TwistLowerAngle = -45
-	ballSocketConstraint.TwistUpperAngle = 45
-	ballSocketConstraint.Parent = attachment0.Parent
-	return ballSocketConstraint
-end
-
-local function createSockets(attachments: typeof(createAttachments()))
-	return {
-		Neck = bindSocket(attachments.Torso.Neck, attachments.Head.Neck),
-		LeftCollar = bindSocket(attachments.Torso.LeftCollar, attachments["Left Arm"].LeftCollar),
-		RightCollar = bindSocket(attachments.Torso.RightCollar, attachments["Right Arm"].RightCollar),
-		LeftHip = bindSocket(attachments.Torso.LeftHip, attachments["Left Leg"].LeftHip),
-		RightHip = bindSocket(attachments.Torso.RightHip, attachments["Right Leg"].RightHip)
-	}
-end
-
-local function getJoints(character: Model)
-	local torso: Part = character.Torso
-	
-	local joints = {
-		Neck = torso.Neck :: Motor6D,
-		RootJoint = character.HumanoidRootPart.RootJoint :: Motor6D,
-		["Left Shoulder"] = torso["Left Shoulder"] :: Motor6D,
-		["Right Shoulder"] = torso["Right Shoulder"] :: Motor6D,
-		["Left Hip"] = torso["Left Hip"] :: Motor6D,
-		["Right Hip"] = torso["Right Hip"] :: Motor6D
-	}
-	
-	return joints
-end
-
-local function createTorsoWeld(torso: Part, part: Part)
-	local weld = Instance.new("Weld")
-	weld.Name = "RagdollTorsoWeld"
-	weld.Part0 = torso
-	weld.Part1 = part
-	weld.Parent = part
-	return weld
-end
-
-local function createTorsoWelds(character: Model, ragdollParts: typeof(createRagdollParts()))
-	return {
-		Head = createTorsoWeld(character.Torso, ragdollParts.Head),
-		Torso = createTorsoWeld(character.Torso, ragdollParts.Torso),
-		["Left Arm"] = createTorsoWeld(character.Torso, ragdollParts["Left Arm"]),
-		["Right Arm"] = createTorsoWeld(character.Torso, ragdollParts["Right Arm"]),
-		["Left Leg"] = createTorsoWeld(character.Torso, ragdollParts["Left Leg"]),
-		["Right Leg"] = createTorsoWeld(character.Torso, ragdollParts["Right Leg"])
-	}
-end
-
-function Ragdoll.new(character: Model)
-	local existing = Ragdoll.find(character)
-	if existing then return existing end
-	
-	local humanoid = character:FindFirstChildWhichIsA("Humanoid")
-	if humanoid then
-		local ragdoll = setmetatable({
-			RId = `{math.random()}-{math.random()}`,
-			Character = character,
-			Humanoid = humanoid,
-			
-			IsRagdolled = false
-		}, { __index = RagdollMethods })
-		
-		humanoid.RequiresNeck = false
-		
-		ragdoll.Parts, ragdoll.PartsContainer = createRagdollParts(character)
-		ragdoll.Attachments = createAttachments(ragdoll.Parts)
-		ragdoll.Sockets = createSockets(ragdoll.Attachments)
-		ragdoll.Joints = getJoints(character)
-		ragdoll.TorsoWelds = createTorsoWelds(character, ragdoll.Parts)
-		Ragdoll._rigs[character] = ragdoll
-		
-		return ragdoll
+const function uprightRotation(rootPart: BasePart): CFrame
+	const look = rootPart.CFrame.LookVector
+	const flat = Vector3.new(look.X, 0, look.Z)
+	if flat.Magnitude < 1e-3 then
+		return CFrame.identity
 	end
+	return CFrame.lookAt(Vector3.zero, flat.Unit)
 end
 
-function Ragdoll.find(character: Model)
-	if Ragdoll._rigs[character] then return Ragdoll._rigs[character] end
+const function rootTarget(self: Ragdoll, torso: BasePart): CFrame
+	return CFrame.new(torso.Position + Vector3.new(0, Settings.RootHeight, 0)) * self._rootRotation
 end
 
-local ragdollReplication = script:WaitForChild("RagdollReplication")
-function RagdollMethods.Toggle(self: Ragdoll, active: boolean)
-	local toggle = active or active == nil and not self.IsRagdolled
-	if toggle == self.IsRagdolled then return end
-	self.IsRagdolled = toggle
-	
-	local character = self.Character
-	local humanoid = self.Humanoid
-	
-	if isServer then
-		humanoid.PlatformStand = toggle
-		ragdollReplication:FireAllClients(character, toggle)
-		return true
-	end
-	
-	local localCharacter = not isServer and players.LocalPlayer.Character
-	
-	for partName, weld: Weld in next, self.TorsoWelds do
-		if localCharacter == character and partName == "Torso" then continue end
-		weld.Enabled = not toggle
-	end; for _, part: Part in next, self.Parts do
-		part.CanCollide = toggle
-		part.CFrame = character[part.Name].CFrame
-	end; for _, joint: Motor6D in next, self.Joints do
-		if joint.Name == "RootJoint" then continue end
-		joint.Enabled = not toggle
-	end; for _, socket: BallSocketConstraint in next, self.Sockets do
-		socket.Enabled = toggle
-	end
-	
-	if localCharacter ~= character then
-		self.Parts.Torso.Anchored = toggle
-	end
-	
-	if toggle then
-		runService:BindToRenderStep(`Ragdoll-{self.RId}`, Enum.RenderPriority.Character.Value - 2, function()
-			humanoid.PlatformStand = toggle
-			for _, part: Part in next, self.Parts do
-				local bodyPart = character[part.Name]
-				bodyPart.CanCollide = not toggle
+const function enable(self: Ragdoll)
+	const humanoid = self.Humanoid
+	const rootPart = humanoid and humanoid.RootPart
 
-				if part.Name == "Torso" and localCharacter ~= character then
-					part.CFrame = bodyPart.CFrame
-				else
-					bodyPart.CFrame = part.CFrame
-				end
+	for _, motor in self.Rig:GetDescendants() do
+		if not motor:IsA("Motor6D") or not motor.Enabled then
+			continue
+		end
+
+		const part0, part1 = motor.Part0, motor.Part1
+		if not part0 or not part1 then
+			continue
+		end
+
+		if part0 == rootPart then
+			self._torso = part1
+		else
+			for _, instance in makeSocket(motor) do
+				self._instances[#self._instances + 1] = instance
 			end
-		end)
-	else
-		runService:UnbindFromRenderStep(`Ragdoll-{self.RId}`)
-		humanoid.PlatformStand = toggle
+			self._instances[#self._instances + 1] = makeCollider(part1, part0)
+		end
+
+		motor.Enabled = false
+		self._motors[#self._motors + 1] = motor
 	end
-	
-	return true
+
+	if humanoid then
+		self._requiresNeck = humanoid.RequiresNeck
+		humanoid.RequiresNeck = false
+		humanoid.PlatformStand = true
+	end
+
+	const torso = self._torso
+	if rootPart and torso then
+		self._rootRotation = uprightRotation(rootPart)
+		self._rootState = { Anchored = rootPart.Anchored, CanCollide = rootPart.CanCollide }
+
+		rootPart.Anchored = true
+		rootPart.CanCollide = false
+		rootPart.CFrame = rootTarget(self, torso)
+
+		self._follow = runService.Heartbeat:Connect(function()
+			if not torso:IsDescendantOf(game) then
+				if self._follow then
+					self._follow:Disconnect()
+					self._follow = nil
+				end
+				return
+			end
+
+			rootPart.CFrame = rootTarget(self, torso)
+		end)
+	end
+end
+
+const function disable(self: Ragdoll)
+	if self._follow then
+		self._follow:Disconnect()
+		self._follow = nil
+	end
+
+	for _, instance in self._instances do
+		instance:Destroy()
+	end
+	table.clear(self._instances)
+
+	const humanoid = self.Humanoid
+	const rootPart = humanoid and humanoid.RootPart
+	const torso = self._torso
+	const rootState = self._rootState
+
+	if rootPart and rootState then
+		if torso and self.Rig:IsDescendantOf(workspace) then
+			rootPart.CFrame = rootTarget(self, torso)
+		end
+		rootPart.Anchored = rootState.Anchored
+		rootPart.CanCollide = rootState.CanCollide
+		rootPart.AssemblyLinearVelocity = Vector3.zero
+		rootPart.AssemblyAngularVelocity = Vector3.zero
+	end
+
+	for _, motor in self._motors do
+		if motor.Parent then
+			motor.Enabled = true
+		end
+	end
+	table.clear(self._motors)
+
+	if humanoid then
+		humanoid.PlatformStand = false
+		humanoid.RequiresNeck = self._requiresNeck
+	end
+
+	self._torso = nil
+	self._rootState = nil
+end
+
+function Ragdoll.new(rig: Model): Ragdoll
+	const self = setmetatable({
+		Rig = rig,
+		Humanoid = rig:FindFirstChildOfClass("Humanoid"),
+		Enabled = false,
+
+		_motors = {} :: { Motor6D },
+		_instances = {} :: { Instance },
+		_requiresNeck = true,
+		_torso = nil :: BasePart?,
+		_rootRotation = CFrame.identity,
+		_rootState = nil :: { Anchored: boolean, CanCollide: boolean }?,
+		_follow = nil :: RBXScriptConnection?,
+	}, { __index = RagdollMethods })
+
+	return self
+end
+
+function RagdollMethods.Toggle(self: Ragdoll, enabled: boolean?)
+	const target = if enabled == nil then not self.Enabled else enabled
+	if target == self.Enabled then
+		return
+	end
+
+	self.Enabled = target
+	if target then
+		enable(self)
+	else
+		disable(self)
+	end
 end
 
 function RagdollMethods.Destroy(self: Ragdoll)
-	runService:UnbindFromRenderStep(`Ragdoll-{self.RId}`)
-	self.PartsContainer:Destroy()
-	for i in next, self do
-		self[i] = nil
-	end; setmetatable(self, {})
-	return
+	self:Toggle(false)
 end
 
-export type Ragdoll = typeof(Ragdoll.new())
+export type Ragdoll = typeof(setmetatable({} :: {
+	Rig: Model,
+	Humanoid: Humanoid?,
+	Enabled: boolean,
 
-if not isServer then
-	ragdollReplication.OnClientEvent:Connect(function(character: Model, toggle: boolean)
-		local ragdoll = Ragdoll.new(character)
-		ragdoll:Toggle(toggle)
-	end)
-end
+	_motors: { Motor6D },
+	_instances: { Instance },
+	_requiresNeck: boolean,
+	_torso: BasePart?,
+	_rootRotation: CFrame,
+	_rootState: { Anchored: boolean, CanCollide: boolean }?,
+	_follow: RBXScriptConnection?,
+}, { __index = RagdollMethods }))
 
-return Ragdoll]]></ProtectedString>
-        </Properties>
-        <Item class="RemoteEvent" referent="RBXTJFPE993V8YNYUPJQYDJ5H28XOR8I972">
-            <Properties>
-                <string name="Name">RagdollReplication</string>
-            </Properties>
-        </Item>
-    </Item>
+return Ragdoll
+]]></ProtectedString>
+			<string name="ScriptGuid">{89FF139C-EA5B-49B2-9F02-8CD37C933EED}</string>
+			<BinaryString name="AttributesSerialize"></BinaryString>
+			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+			<bool name="DefinesCapabilities">false</bool>
+			<string name="Name">Ragdoll</string>
+			<int64 name="SourceAssetId">-1</int64>
+			<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+		</Properties>
+		<Item class="ModuleScript" referent="RBX5AA2BC0460834EC4ABA4136F4750EB15">
+			<Properties>
+				<Content name="LinkedSource"><null></null></Content>
+				<ProtectedString name="Source"><![CDATA[return {
+	-- How far (degrees) a limb can swing away from its rest direction.
+	UpperAngle = 60,
+
+	-- How far (degrees) a limb can twist either way around itself.
+	TwistAngle = 45,
+
+	-- Size of each limb's invisible collider relative to the limb. Limbs don't
+	-- collide on their own (the Humanoid handles that normally), so without
+	-- these they'd fall through the floor.
+	ColliderScale = 0.9,
+
+	-- Studs above the torso the detached HumanoidRootPart floats while
+	-- ragdolled. Also where the character stands back up from, so the get-up
+	-- doesn't start stuck in the ground.
+	RootHeight = 2.5,
+}
+]]></ProtectedString>
+				<string name="ScriptGuid">{61119FFD-0255-4A10-843F-A07D154BA763}</string>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<string name="Name">RagdollSettings</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+			</Properties>
+		</Item>
+	</Item>
+	<SharedStrings>
+		<SharedString md5="yuZpQdnvvUBOTYh1jqZ2cA=="></SharedString>
+	</SharedStrings>
 </roblox>
